@@ -5,9 +5,9 @@
 ;; name in dgo: guard
 ;; dgos: CWI
 
-;; MOD peaceful-haven-city -- alert toggle (GAME, peaceful-haven-city-menu.gc), read in
+;; MOD haven-city-breath-of-peace -- alert toggle (GAME, haven-city-breath-of-peace-menu.gc), read in
 ;; damage-enemy-from-attack! below.
-(define-extern *mod-peaceful-haven-city-alert* symbol)
+(define-extern *mod-haven-city-breath-of-peace-alert* symbol)
 
 ;; DECOMP BEGINS
 
@@ -2025,8 +2025,8 @@
     (let ((v1-4 (handle->process (-> this incoming attacker-handle))))
       (when v1-4
         (when (= (-> v1-4 type) target)
-          ;; MOD peaceful-haven-city -- Jak 2: any attack on a guard raises the city alert to 1
-          (if *mod-peaceful-haven-city-alert*
+          ;; MOD haven-city-breath-of-peace -- Jak 2: any attack on a guard raises the city alert to 1
+          (if *mod-haven-city-breath-of-peace-alert*
               (citizen-method-210 this 1 v1-4)
               )
           (when (time-elapsed? (-> this last-player-attack-time) (seconds 0.5))

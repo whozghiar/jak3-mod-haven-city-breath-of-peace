@@ -1,13 +1,13 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;; name: peaceful-haven-city-menu.gc
+;; name: haven-city-breath-of-peace-menu.gc
 ;; dgos: GAME
 ;;
-;; Peaceful Haven City -- GAME-resident half of the mod: the four Mods-menu toggles
-;; ([L3 + SELECT] > Mods > peaceful-haven-city) and the data the city code points the game at.
+;; Haven City: Breath of Peace -- GAME-resident half of the mod: the four Mods-menu toggles
+;; ([L3 + SELECT] > Mods > haven-city-breath-of-peace) and the data the city code points the game at.
 ;;
-;; Why this file is in GAME and not with the gameplay code (CWI, peaceful-haven-city.gc):
+;; Why this file is in GAME and not with the gameplay code (CWI, haven-city-breath-of-peace.gc):
 ;;   - the Mods menu must exist in every level, and a menu file must never be debug-only;
 ;;   - the city code patches GAME-resident level-load-infos (the ctywide-* borrow aliases). Anything
 ;;     those infos point at must outlive the CWI DGO, or leaving Haven City would leave dangling
@@ -18,46 +18,46 @@
 ;; Every feature ships OFF: with the four flags #f the game plays as stock.
 
 ;; ------------------------------------------------------------------------------------------------
-;; Player toggles (read every frame by peaceful-haven-city.gc)
+;; Player toggles (read every frame by haven-city-breath-of-peace.gc)
 ;; ------------------------------------------------------------------------------------------------
 
 ;; Peace in Haven City: Freedom League guards in every district, citizens in every district except
 ;; the Metal Head zone, no Krimson Guard robots nor Metal Heads. Yields to missions that drive the
 ;; city's factions themselves.
-(define *mod-peaceful-haven-city-peace* #f)
+(define *mod-haven-city-breath-of-peace-peace* #f)
 
 ;; Jak 2's alert system (wanted level 0-4, alert music, guards and Hellcats hunting Jak).
-(define *mod-peaceful-haven-city-alert* #f)
+(define *mod-haven-city-breath-of-peace-alert* #f)
 
 ;; Freedom League Hellcat patrols in the city's air traffic.
-(define *mod-peaceful-haven-city-hellcats* #f)
+(define *mod-haven-city-breath-of-peace-hellcats* #f)
 
 ;; Busier streets: more citizens (a larger share of them fat citizens) and more guards wherever the
 ;; city already has some.
-(define *mod-peaceful-haven-city-crowds* #f)
+(define *mod-haven-city-breath-of-peace-crowds* #f)
 
 ;; ------------------------------------------------------------------------------------------------
-;; State shared with vanilla files (written by peaceful-haven-city.gc)
+;; State shared with vanilla files (written by haven-city-breath-of-peace.gc)
 ;; ------------------------------------------------------------------------------------------------
 
 ;; #t while peace is actually enforced (toggle on and no mission driving the city). Read by the
 ;; flitter-spawner hook in ctywide-obs.gc.
-(define *mod-peaceful-haven-city-peace-active* #f)
+(define *mod-haven-city-breath-of-peace-peace-active* #f)
 
 ;; The borrow list every plain ctywide-* alias is switched to while peace is enforced: the stock
 ;; `ctywide-ff` list (guards, cars, bikes, citizens). Citizens' art (ctypepa) must be resident in
 ;; every district for them to walk there; Metal Head and robot art is not needed anymore.
-(define *mod-peaceful-haven-city-peace-alias*
+(define *mod-haven-city-breath-of-peace-peace-alias*
   '(ctywide copy ctypesa auto ctycara auto ctycarb auto ctypepa special))
 
 ;; The aliases the peace mode may patch, and the list each one held before (to restore it).
-(define *mod-peaceful-haven-city-city-aliases*
+(define *mod-haven-city-breath-of-peace-city-aliases*
   (new 'static 'boxed-array :type symbol
     'ctywide-ff 'ctywide-ff-kg 'ctywide-mh-kg 'ctywide-ff-mh 'ctywide-kg 'ctywide-mh 'ctywide-kg-mh
     )
   )
 
-(define *mod-peaceful-haven-city-saved-aliases*
+(define *mod-haven-city-breath-of-peace-saved-aliases*
   (new 'static 'boxed-array :type object #f #f #f #f #f #f #f)
   )
 
@@ -65,40 +65,40 @@
 ;; Mods menu
 ;; ------------------------------------------------------------------------------------------------
 
-(define *mod-peaceful-haven-city-menu*
-  (new 'static 'popup-menu-submenu :label "peaceful-haven-city"
+(define *mod-haven-city-breath-of-peace-menu*
+  (new 'static 'popup-menu-submenu :label "haven-city-breath-of-peace"
     :entries (new 'static 'boxed-array :type popup-menu-entry
       (new 'static 'popup-menu-flag :label "Peace in Haven City"
-           :is-toggled? (lambda () *mod-peaceful-haven-city-peace*)
+           :is-toggled? (lambda () *mod-haven-city-breath-of-peace-peace*)
            :on-confirm (lambda ()
-                         (set! *mod-peaceful-haven-city-peace* (not *mod-peaceful-haven-city-peace*))
+                         (set! *mod-haven-city-breath-of-peace-peace* (not *mod-haven-city-breath-of-peace-peace*))
                          (none))
            )
       (new 'static 'popup-menu-flag :label "Jak 2 alert system"
-           :is-toggled? (lambda () *mod-peaceful-haven-city-alert*)
+           :is-toggled? (lambda () *mod-haven-city-breath-of-peace-alert*)
            :on-confirm (lambda ()
-                         (set! *mod-peaceful-haven-city-alert* (not *mod-peaceful-haven-city-alert*))
+                         (set! *mod-haven-city-breath-of-peace-alert* (not *mod-haven-city-breath-of-peace-alert*))
                          (none))
            )
       (new 'static 'popup-menu-flag :label "Freedom League Hellcats"
-           :is-toggled? (lambda () *mod-peaceful-haven-city-hellcats*)
+           :is-toggled? (lambda () *mod-haven-city-breath-of-peace-hellcats*)
            :on-confirm (lambda ()
-                         (set! *mod-peaceful-haven-city-hellcats* (not *mod-peaceful-haven-city-hellcats*))
+                         (set! *mod-haven-city-breath-of-peace-hellcats* (not *mod-haven-city-breath-of-peace-hellcats*))
                          (none))
            )
       (new 'static 'popup-menu-flag :label "Busier streets"
-           :is-toggled? (lambda () *mod-peaceful-haven-city-crowds*)
+           :is-toggled? (lambda () *mod-haven-city-breath-of-peace-crowds*)
            :on-confirm (lambda ()
-                         (set! *mod-peaceful-haven-city-crowds* (not *mod-peaceful-haven-city-crowds*))
+                         (set! *mod-haven-city-breath-of-peace-crowds* (not *mod-haven-city-breath-of-peace-crowds*))
                          (none))
            )
       )
     )
   )
 
-(defun mod-peaceful-haven-city-build-menu ()
+(defun mod-haven-city-breath-of-peace-build-menu ()
   "Return this mod's entry for the Mods menu (pure: the menu is static)."
-  (the-as popup-menu-entry *mod-peaceful-haven-city-menu*)
+  (the-as popup-menu-entry *mod-haven-city-breath-of-peace-menu*)
   )
 
-(mods-menu-register "peaceful-haven-city" mod-peaceful-haven-city-build-menu)
+(mods-menu-register "haven-city-breath-of-peace" mod-haven-city-breath-of-peace-build-menu)

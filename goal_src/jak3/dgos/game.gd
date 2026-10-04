@@ -351,7 +351,7 @@
   "popup-menu.o" ;; added
   "speedruns.o" ;; added
   "mods-menu.o" ;; added -- unified in-game "Mods" menu (see pc/features/mods-menu.gc)
-  "peaceful-haven-city-menu.o" ;; MOD peaceful-haven-city -- Mods-menu toggles + GAME-resident state
+  "haven-city-breath-of-peace-menu.o" ;; MOD haven-city-breath-of-peace -- Mods-menu toggles + GAME-resident state
   "drawable.o"
   "drawable-group.o"
   "drawable-inline-array.o"

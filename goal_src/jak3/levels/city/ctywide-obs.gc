@@ -5,9 +5,9 @@
 ;; name in dgo: ctywide-obs
 ;; dgos: CWI
 
-;; MOD peaceful-haven-city -- #t while the mod enforces peace (GAME, peaceful-haven-city-menu.gc),
+;; MOD haven-city-breath-of-peace -- #t while the mod enforces peace (GAME, haven-city-breath-of-peace-menu.gc),
 ;; read by flitter-spawner below.
-(define-extern *mod-peaceful-haven-city-peace-active* symbol)
+(define-extern *mod-haven-city-breath-of-peace-peace-active* symbol)
 
 ;; DECOMP BEGINS
 
@@ -2586,7 +2586,7 @@
   :trans (behavior ()
     ;; og:preserve-this peaceful city cheat
     (#when PC_PORT
-      (when (or *mod-peaceful-haven-city-peace-active* ;; MOD peaceful-haven-city -- peace clears flitters too
+      (when (or *mod-haven-city-breath-of-peace-peace-active* ;; MOD haven-city-breath-of-peace -- peace clears flitters too
                 (and (pc-cheats? (-> *pc-settings* cheats) city-peace)
                      (not (task-node-open? (game-task-node city-port-fight-resolution)))
                      (not (task-node-open? (game-task-node city-port-assault-resolution)))
@@ -2604,8 +2604,8 @@
           )
         )
       )
-    ;; MOD peaceful-haven-city -- no flitter respawn while peace is enforced
-    (when (and (time-elapsed? (-> self state-time) (seconds 1)) (not *mod-peaceful-haven-city-peace-active*))
+    ;; MOD haven-city-breath-of-peace -- no flitter respawn while peace is enforced
+    (when (and (time-elapsed? (-> self state-time) (seconds 1)) (not *mod-haven-city-breath-of-peace-peace-active*))
       (set-time! (-> self state-time))
       (let ((gp-0 0))
         (dotimes (s5-0 (-> self spawner records length))

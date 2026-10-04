@@ -17,11 +17,11 @@
 
 (define-extern *traffic-alert-level-force* symbol)
 
-;; MOD peaceful-haven-city -- toggle (GAME, peaceful-haven-city-menu.gc) and per-frame entry points
-;; (CWI, peaceful-haven-city.gc, linked after this file) called from `update` below.
-(define-extern *mod-peaceful-haven-city-alert* symbol)
-(define-extern mod-peaceful-haven-city-alert-update (function ff-squad-control none))
-(define-extern mod-peaceful-haven-city-update (function ff-squad-control none))
+;; MOD haven-city-breath-of-peace -- toggle (GAME, haven-city-breath-of-peace-menu.gc) and per-frame entry points
+;; (CWI, haven-city-breath-of-peace.gc, linked after this file) called from `update` below.
+(define-extern *mod-haven-city-breath-of-peace-alert* symbol)
+(define-extern mod-haven-city-breath-of-peace-alert-update (function ff-squad-control none))
+(define-extern mod-haven-city-breath-of-peace-update (function ff-squad-control none))
 
 ;; DECOMP BEGINS
 
@@ -871,9 +871,9 @@
 
 (defmethod update ((this ff-squad-control))
   (call-parent-method this)
-  ;; MOD peaceful-haven-city -- while the mod's alert toggle is on, its Jak 2 port replaces method-45
-  (if *mod-peaceful-haven-city-alert*
-      (mod-peaceful-haven-city-alert-update this)
+  ;; MOD haven-city-breath-of-peace -- while the mod's alert toggle is on, its Jak 2 port replaces method-45
+  (if *mod-haven-city-breath-of-peace-alert*
+      (mod-haven-city-breath-of-peace-alert-update this)
       (ff-squad-control-method-45 this)
       )
   (ff-squad-control-method-46 this)
@@ -887,8 +887,8 @@
       (faction-spawn *cty-faction-manager* 2 a2-0 #f #f)
       )
     )
-  ;; MOD peaceful-haven-city -- peace, alert pools and Hellcat traffic, after every stock write
-  (mod-peaceful-haven-city-update this)
+  ;; MOD haven-city-breath-of-peace -- peace, alert pools and Hellcat traffic, after every stock write
+  (mod-haven-city-breath-of-peace-update this)
   0
   (none)
   )

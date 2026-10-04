@@ -1,4 +1,4 @@
-# Peaceful Haven City — Jak 3
+# Haven City: Breath of Peace — Jak 3
 
 <p align="center">
   <img src="https://img.shields.io/badge/OpenGOAL-Mod-blue.svg" alt="OpenGOAL Mod">
@@ -14,10 +14,10 @@
 Haven City at peace in Jak 3: Freedom League guards and citizens walk every district and enemies stop spawning, with an optional Jak 2-style alert system and Freedom Fighter Hellcat patrols, all switchable from the Mods menu.
 
 - **Target Game:** Jak 3
-- **Repository:** [`whozghiar/jak3-mod-peaceful-haven-city`](https://github.com/whozghiar/jak3-mod-peaceful-haven-city), created from the modding base [`whozghiar/jak-project`](https://github.com/whozghiar/jak-project)
+- **Repository:** [`whozghiar/jak3-mod-haven-city-breath-of-peace`](https://github.com/whozghiar/jak3-mod-haven-city-breath-of-peace), created from the modding base [`whozghiar/jak-project`](https://github.com/whozghiar/jak-project)
 
 ## Key Features
-Open the Mods menu in game with **L3 + SELECT**, then **peaceful-haven-city**. Every feature starts off and can be switched on or off at any time, alone or together.
+Open the Mods menu in game with **L3 + SELECT**, then **haven-city-breath-of-peace**. Every feature starts off and can be switched on or off at any time, alone or together.
 
 - **Peace in Haven City:** Freedom League guards patrol every district, the Metal Head zone included, and citizens walk every district except the Metal Head zone. Krimson Guard robots and Metal Heads no longer appear. Story missions that need enemies still get them.
 - **Jak 2 alert system:** hurt a citizen or attack a guard and the city goes on alert, as in Jak 2: five alert levels, guards hunting you, battle music and a red-pulsing minimap. Keep fighting and the alert climbs; lie low for about 30 seconds and it ends once the guards stand down.
@@ -33,16 +33,16 @@ Open the Mods menu in game with **L3 + SELECT**, then **peaceful-haven-city**. E
 1. In the **OpenGOAL Launcher**, navigate to **Settings ▸ Mods ▸ Add Custom Mod Source**.
 2. Paste this catalog URL:
    ```text
-   https://raw.githubusercontent.com/whozghiar/jak3-mod-peaceful-haven-city/main/index.json
+   https://raw.githubusercontent.com/whozghiar/jak3-mod-haven-city-breath-of-peace/main/index.json
    ```
-3. Go to the **Mods** tab, locate **Peaceful Haven City**, and click **Install**.
+3. Go to the **Mods** tab, locate **Haven City: Breath of Peace**, and click **Install**.
 4. Select your clean PS2 game ISO when prompted. The launcher will automatically extract assets and launch the game!
 
 ### Option B — Manual Installation from GitHub Releases
-1. Download the pre-built package for your operating system from the [Releases](https://github.com/whozghiar/jak3-mod-peaceful-haven-city/releases) tab (`windows-v*.zip` or `linux-v*.zip`).
+1. Download the pre-built package for your operating system from the [Releases](https://github.com/whozghiar/jak3-mod-haven-city-breath-of-peace/releases) tab (`windows-v*.zip` or `linux-v*.zip`).
 2. Extract the archive into your OpenGOAL Launcher features directory:
-   - **Windows:** `%APPDATA%\OpenGOAL-Launcher\features\jak3\mods\_local\peaceful-haven-city\`
-   - **Linux:** `~/.config/OpenGOAL-Launcher/features/jak3/mods/_local/peaceful-haven-city/`
+   - **Windows:** `%APPDATA%\OpenGOAL-Launcher\features\jak3\mods\_local\haven-city-breath-of-peace\`
+   - **Linux:** `~/.config/OpenGOAL-Launcher/features/jak3/mods/_local/haven-city-breath-of-peace/`
 3. Launch the game from the OpenGOAL Launcher.
 
 ---
@@ -54,11 +54,11 @@ If you want to modify or compile this mod locally from source:
 ### 0. Get the Source
 Already working in a clone of [`whozghiar/jak-project`](https://github.com/whozghiar/jak-project)? Switch to this mod there, keeping your extracted game data:
 ```bash
-task modding-switch -- jak3-mod-peaceful-haven-city
+task modding-switch -- jak3-mod-haven-city-breath-of-peace
 ```
 Otherwise clone it on its own; the knowledge base used by AI agents is a submodule, so clone with it:
 ```bash
-git clone --recurse-submodules https://github.com/whozghiar/jak3-mod-peaceful-haven-city.git
+git clone --recurse-submodules https://github.com/whozghiar/jak3-mod-haven-city-breath-of-peace.git
 ```
 To pull the latest modding base into this mod later, run `task modding-sync-branch`.
 
@@ -104,7 +104,7 @@ task boot-game
 
 ## Technical Documentation
 For the complete technical breakdown, architecture, developer notes and change log, refer to:
-- [`docs/modding/current_mod/peaceful-haven-city_readme.md`](docs/modding/current_mod/peaceful-haven-city_readme.md)
+- [`docs/modding/current_mod/haven-city-breath-of-peace_readme.md`](docs/modding/current_mod/haven-city-breath-of-peace_readme.md)
 
 ---
 *(AI-assisted)*

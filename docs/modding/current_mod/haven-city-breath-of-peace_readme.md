@@ -1,4 +1,4 @@
-# Peaceful Haven City (Jak 3): technical notes
+# Haven City: Breath of Peace (Jak 3): technical notes
 
 How the mod is built: its files, the vanilla hook points, how each feature works on Jak 3's city
 code, how to rebuild it, what to check in game, and the change log. Player-facing description:
@@ -7,7 +7,7 @@ the root [`README.md`](../../../README.md). GOAL patterns referenced here live i
 
 ## 1. Features
 
-All four ship off. They are switched in [L3 + SELECT] > Mods > `peaceful-haven-city` and can be
+All four ship off. They are switched in [L3 + SELECT] > Mods > `haven-city-breath-of-peace` and can be
 combined freely.
 
 | Toggle | Effect |
@@ -21,10 +21,10 @@ combined freely.
 
 | File | DGO | Role |
 |---|---|---|
-| `goal_src/jak3/pc/features/peaceful-haven-city-menu.gc` | GAME | The four toggles and the Mods menu. Also the data the city code points GAME structures at (the peace borrow alias, the saved stock aliases), so nothing dangles when CWI unloads. |
-| `goal_src/jak3/levels/city/peaceful-haven-city/peaceful-haven-city.gc` | CWI | All gameplay code: peace, the alert port, the `h-hellcat` class and its pilot, the crowd pools. Linked right after `ctywide-init.o`. |
+| `goal_src/jak3/pc/features/haven-city-breath-of-peace-menu.gc` | GAME | The four toggles and the Mods menu. Also the data the city code points GAME structures at (the peace borrow alias, the saved stock aliases), so nothing dangles when CWI unloads. |
+| `goal_src/jak3/levels/city/haven-city-breath-of-peace/haven-city-breath-of-peace.gc` | CWI | All gameplay code: peace, the alert port, the `h-hellcat` class and its pilot, the crowd pools. Linked right after `ctywide-init.o`. |
 
-Vanilla touch points, each marked `MOD peaceful-haven-city`:
+Vanilla touch points, each marked `MOD haven-city-breath-of-peace`:
 
 | File | Change |
 |---|---|
@@ -71,7 +71,7 @@ Jak 3 kept Jak 2's alert state machine as `ff-squad-control-method-45` and still
 Jak hits a civilian (`citizen-method-210`), but nothing reacts to it: guards ignore `'alert-begin`,
 the music and minimap pulse are gone, `*alert-level-settings*` holds one level of five (levels 1+
 read past it) and `ff-squad-control-method-48` (live guard count) returns nothing, so an alert
-never ends. With the toggle on, the mod's `mod-peaceful-haven-city-alert-update` replaces
+never ends. With the toggle on, the mod's `mod-haven-city-breath-of-peace-alert-update` replaces
 method-45:
 
 | Part | Behavior |
@@ -94,7 +94,7 @@ and `skel-h-hellcat`, but never defines the class nor loads its art (`CTYCARC`).
 
 - defines `h-hellcat` on `h-car-base`, with the collision Jak 3's own `h-warf` uses on the same
   art, and Jak 2's front turret (joint 4) firing `guard-shot`;
-- spawns a pilot, `mod-peaceful-haven-city-pilot`: a `vehicle-rider` on the Freedom League guard
+- spawns a pilot, `mod-haven-city-breath-of-peace-pilot`: a `vehicle-rider` on the Freedom League guard
   model, in the seated stance (`crimson-guard-car-stance-ja`). `crimson-guard-ag` holds every mesh
   variant at once (blue and dark guard bodies, weapons): the pilot sets the masks a guard on foot
   sets in `crimson-guard-method-267` (hide bits 1-4, show 3), without a weapon;
@@ -173,8 +173,6 @@ After switching from another mod, compile with the forced build described in
 - Jak 2's alarm sound effect is not played: the alert uses the battle music only.
 - Jak cannot use his own gun while flying a Hellcat (constants flag `#x20` off, unlike the city
   cars): the Hellcat's front gun replaces it.
-- The global launcher catalog key `peaceful-haven-city` is also the Jak 2 mod's key: on release,
-  the catalog keeps one of the two (`sync_global_catalog.py` warns and the newest release wins).
 
 ## 7. Change log
 
@@ -183,3 +181,4 @@ After switching from another mod, compile with the forced build described in
 | 2026-10-04 | First version: peace, Jak 2 alert system, Freedom League Hellcats. Compiles (forced build, 3508 targets), `hellcat-ag` baked into `ctypesa.fr3`. Played by the user: the three features work. Open: the pilot shows every guard mesh variant at once, and Jak can hang on a Hellcat but not fly it. |
 | 2026-10-04 | Pilot shows a regular blue guard (guard mesh masks). Hellcats can be stolen (no `no-hijack`; alert dropped on boarding). New toggle "Busier streets": bigger citizen and guard pools, about one fat citizen in four. Played by the user: all three work, engine sound fine while Jak flies a Hellcat. |
 | 2026-10-04 | Jak fires the stolen Hellcat's front gun with R1. Played by the user: works. |
+| 2026-10-04 | Renamed from Peaceful Haven City to Haven City: Breath of Peace (repository `jak3-mod-haven-city-breath-of-peace`, catalog key `haven-city-breath-of-peace`, which no longer collides with the Jak 2 mod's key). Code symbols, files and the Mods-menu entry follow the new slug. |

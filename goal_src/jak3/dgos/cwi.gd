@@ -72,7 +72,7 @@
   "mh-squad-control.o"
   "cty-borrow-manager.o"
   "ctywide-init.o"
-  "peaceful-haven-city.o" ;; MOD peaceful-haven-city -- peace, Jak 2 alert, Hellcats (after every city type it uses)
+  "haven-city-breath-of-peace.o" ;; MOD haven-city-breath-of-peace -- peace, Jak 2 alert, Hellcats (after every city type it uses)
   "ctywide-texture.o"
   "ctywide-part.o"
   "ctywide-obs.o"

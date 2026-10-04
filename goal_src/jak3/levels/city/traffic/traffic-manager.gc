@@ -356,7 +356,7 @@
       (((traffic-type civilian-car-c))
        (set! v0-0 (vehicle-spawn (vehicle-type h-car-c) arg1))
        )
-      ;; MOD peaceful-haven-city -- Freedom League Hellcat (class in peaceful-haven-city.gc). Stock
+      ;; MOD haven-city-breath-of-peace -- Freedom League Hellcat (class in haven-city-breath-of-peace.gc). Stock
       ;; never spawns guard-car: its want-count stays 0 unless the mod's Hellcat toggle is on.
       (((traffic-type guard-car))
        (set! v0-0 (vehicle-spawn (vehicle-type h-hellcat) arg1))

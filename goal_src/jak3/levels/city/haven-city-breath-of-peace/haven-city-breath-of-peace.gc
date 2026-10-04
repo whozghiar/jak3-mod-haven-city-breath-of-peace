@@ -1,12 +1,12 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;; name: peaceful-haven-city.gc
+;; name: haven-city-breath-of-peace.gc
 ;; dgos: CWI
 ;;
-;; Peaceful Haven City -- gameplay half of the mod, linked in CWI (ctywide) right after
+;; Haven City: Breath of Peace -- gameplay half of the mod, linked in CWI (ctywide) right after
 ;; ctywide-init.o so every city type it touches already exists. Four features, each one driven by a
-;; GAME-resident toggle of peaceful-haven-city-menu.gc and applied from the city's own per-frame
+;; GAME-resident toggle of haven-city-breath-of-peace-menu.gc and applied from the city's own per-frame
 ;; update (ff-squad-control `update`, hooked in ff-squad-control.gc), so nothing runs outside the city:
 ;;
 ;;   1. Peace: Freedom League guards in every district, citizens everywhere but the Metal Head zone,
@@ -18,17 +18,17 @@
 ;;      League pilot, air-traffic spawning, and Jak 2's guard-vehicle pursuit. Jak can steal them.
 ;;   4. Busier streets: larger citizen and guard pools, with more fat citizens in the mix.
 ;;
-;; Technical notes and the change log: docs/modding/current_mod/peaceful-haven-city_readme.md.
+;; Technical notes and the change log: docs/modding/current_mod/haven-city-breath-of-peace_readme.md.
 
-;; GAME-resident state, defined in pc/features/peaceful-haven-city-menu.gc.
-(define-extern *mod-peaceful-haven-city-peace* symbol)
-(define-extern *mod-peaceful-haven-city-alert* symbol)
-(define-extern *mod-peaceful-haven-city-hellcats* symbol)
-(define-extern *mod-peaceful-haven-city-crowds* symbol)
-(define-extern *mod-peaceful-haven-city-peace-active* symbol)
-(define-extern *mod-peaceful-haven-city-peace-alias* pair)
-(define-extern *mod-peaceful-haven-city-city-aliases* (array symbol))
-(define-extern *mod-peaceful-haven-city-saved-aliases* (array object))
+;; GAME-resident state, defined in pc/features/haven-city-breath-of-peace-menu.gc.
+(define-extern *mod-haven-city-breath-of-peace-peace* symbol)
+(define-extern *mod-haven-city-breath-of-peace-alert* symbol)
+(define-extern *mod-haven-city-breath-of-peace-hellcats* symbol)
+(define-extern *mod-haven-city-breath-of-peace-crowds* symbol)
+(define-extern *mod-haven-city-breath-of-peace-peace-active* symbol)
+(define-extern *mod-haven-city-breath-of-peace-peace-alias* pair)
+(define-extern *mod-haven-city-breath-of-peace-city-aliases* (array symbol))
+(define-extern *mod-haven-city-breath-of-peace-saved-aliases* (array object))
 
 ;; ================================================================================================
 ;; 1. Peace in Haven City
@@ -42,22 +42,22 @@
 ;; (values far beyond any modifier) and putting the default pointers back is a full restore.
 ;; Slot order: ff-guard ff-ped kg-guard kg-ped mh-guard mh-ped.
 
-(define *mod-peaceful-haven-city-peace-territory*
+(define *mod-haven-city-breath-of-peace-peace-territory*
   (new 'static 'cty-faction-info :ff-guard 60 :ff-ped 60 :kg-guard -60 :kg-ped -60 :mh-guard -60 :mh-ped -60)
   )
 
 ;; Metal Head zone (territories mhcity-mh-ff-border, mhcity-mh, mhcity-mh-deep): guards, no citizens.
-(define *mod-peaceful-haven-city-peace-mh-territory*
+(define *mod-haven-city-breath-of-peace-peace-mh-territory*
   (new 'static 'cty-faction-info :ff-guard 60 :ff-ped -60 :kg-guard -60 :kg-ped -60 :mh-guard -60 :mh-ped -60)
   )
 
 ;; Number of territories with stock data (port-ff-deep .. mhcity-mh-deep). special0-8 stay stock.
-(defconstant MOD_PEACEFUL_HAVEN_CITY_TERRITORIES 21)
+(defconstant MOD_HAVEN_CITY_BREATH_OF_PEACE_TERRITORIES 21)
 
 ;; #t while the peace tables and aliases are installed (so switching peace off restores them once).
-(define *mod-peaceful-haven-city-peace-applied* #f)
+(define *mod-haven-city-breath-of-peace-peace-applied* #f)
 
-(defun mod-peaceful-haven-city-mission-active? ()
+(defun mod-haven-city-breath-of-peace-mission-active? ()
   "True while a mission drives the city's factions itself: an open task node with faction commands
    (the port fight, the HQ defence, the tower, ...), a mission's enemy settings, or a faction-command
    setting. Peace steps aside then, so missions keep the enemies they need."
@@ -82,7 +82,7 @@
   #f
   )
 
-(defun mod-peaceful-haven-city-plain-alias? ((alias object))
+(defun mod-haven-city-breath-of-peace-plain-alias? ((alias object))
   "True when a ctywide-* borrow alias only borrows the stock city art levels. Aliases that borrow a
    mission level (lctyass, lctyprot, lpatkcs, ...) are left alone: replacing them would unload it."
   (when (or (not alias) (null? alias))
@@ -117,25 +117,25 @@
   #t
   )
 
-(defun mod-peaceful-haven-city-patch-aliases ((on symbol))
+(defun mod-haven-city-breath-of-peace-patch-aliases ((on symbol))
   "Switch every plain ctywide-* alias to the peace borrow list (on = #t), or put the saved lists back
    (on = #f). The originals are saved in GAME memory, so they survive CWI unloading. Stock tasks reset
    the aliases on every update-task-masks: the next call simply saves the fresh list and patches again."
   (let ((changed #f))
-    (dotimes (i (-> *mod-peaceful-haven-city-city-aliases* length))
-      (let ((info (lookup-level-info (-> *mod-peaceful-haven-city-city-aliases* i))))
+    (dotimes (i (-> *mod-haven-city-breath-of-peace-city-aliases* length))
+      (let ((info (lookup-level-info (-> *mod-haven-city-breath-of-peace-city-aliases* i))))
         (when (and info (-> info borrow))
           (let ((cur (-> info borrow alias)))
             (cond
               (on
-                (when (and (!= cur *mod-peaceful-haven-city-peace-alias*) (mod-peaceful-haven-city-plain-alias? cur))
-                  (set! (-> *mod-peaceful-haven-city-saved-aliases* i) cur)
-                  (set! (-> info borrow alias) *mod-peaceful-haven-city-peace-alias*)
+                (when (and (!= cur *mod-haven-city-breath-of-peace-peace-alias*) (mod-haven-city-breath-of-peace-plain-alias? cur))
+                  (set! (-> *mod-haven-city-breath-of-peace-saved-aliases* i) cur)
+                  (set! (-> info borrow alias) *mod-haven-city-breath-of-peace-peace-alias*)
                   (set! changed #t)
                   )
                 )
-              ((= cur *mod-peaceful-haven-city-peace-alias*)
-               (set! (-> info borrow alias) (-> *mod-peaceful-haven-city-saved-aliases* i))
+              ((= cur *mod-haven-city-breath-of-peace-peace-alias*)
+               (set! (-> info borrow alias) (-> *mod-haven-city-breath-of-peace-saved-aliases* i))
                (set! changed #t)
                )
               )
@@ -150,21 +150,21 @@
   (none)
   )
 
-(defun mod-peaceful-haven-city-patch-factions ((mgr cty-faction-manager) (on symbol))
+(defun mod-haven-city-breath-of-peace-patch-factions ((mgr cty-faction-manager) (on symbol))
   "Point the faction table at the peace entries (on = #t) or back at *default-faction-info*, then
    flush the permission cache and rebuild the territory list (borrowed faction art, war modes)."
-  (when (!= (= (-> mgr faction-array 0) *mod-peaceful-haven-city-peace-territory*) on)
-    (dotimes (i MOD_PEACEFUL_HAVEN_CITY_TERRITORIES)
+  (when (!= (= (-> mgr faction-array 0) *mod-haven-city-breath-of-peace-peace-territory*) on)
+    (dotimes (i MOD_HAVEN_CITY_BREATH_OF_PEACE_TERRITORIES)
       (set! (-> mgr faction-array i)
             (cond
               ((not on)
                (-> *default-faction-info* i)
                )
               ((>= i (the-as int (nav-territory-type mhcity-mh-ff-border)))
-               *mod-peaceful-haven-city-peace-mh-territory*
+               *mod-haven-city-breath-of-peace-peace-mh-territory*
                )
               (else
-                *mod-peaceful-haven-city-peace-territory*
+                *mod-haven-city-breath-of-peace-peace-territory*
                 )
               )
             )
@@ -175,18 +175,18 @@
   (none)
   )
 
-(defun mod-peaceful-haven-city-peace-update ()
+(defun mod-haven-city-breath-of-peace-peace-update ()
   "Per-frame peace driver. Enforces the peace tables while the toggle is on and no mission drives the
    city, removes the enemies already out on the first frame, and restores stock state once otherwise."
   (let ((mgr *cty-faction-manager*)
-        (want (and *mod-peaceful-haven-city-peace* (not (mod-peaceful-haven-city-mission-active?))))
+        (want (and *mod-haven-city-breath-of-peace-peace* (not (mod-haven-city-breath-of-peace-mission-active?))))
         )
-    (set! *mod-peaceful-haven-city-peace-active* want)
+    (set! *mod-haven-city-breath-of-peace-peace-active* want)
     (when mgr
       (cond
         (want
-          (when (not *mod-peaceful-haven-city-peace-applied*)
-            (set! *mod-peaceful-haven-city-peace-applied* #t)
+          (when (not *mod-haven-city-breath-of-peace-peace-applied*)
+            (set! *mod-haven-city-breath-of-peace-peace-applied* #t)
             ;; robots and Metal Heads already out: no new ones can activate once the tables are in
             (send-event *traffic-manager* 'deactivate-by-type (traffic-type metalhead-grunt))
             (send-event *traffic-manager* 'deactivate-by-type (traffic-type metalhead-flitter))
@@ -195,13 +195,13 @@
             (send-event *traffic-manager* 'deactivate-by-type (traffic-type spydroid))
             (send-event *traffic-manager* 'deactivate-by-type (traffic-type flying-turret))
             )
-          (mod-peaceful-haven-city-patch-factions mgr #t)
-          (mod-peaceful-haven-city-patch-aliases #t)
+          (mod-haven-city-breath-of-peace-patch-factions mgr #t)
+          (mod-haven-city-breath-of-peace-patch-aliases #t)
           )
-        (*mod-peaceful-haven-city-peace-applied*
-          (set! *mod-peaceful-haven-city-peace-applied* #f)
-          (mod-peaceful-haven-city-patch-factions mgr #f)
-          (mod-peaceful-haven-city-patch-aliases #f)
+        (*mod-haven-city-breath-of-peace-peace-applied*
+          (set! *mod-haven-city-breath-of-peace-peace-applied* #f)
+          (mod-haven-city-breath-of-peace-patch-factions mgr #f)
+          (mod-haven-city-breath-of-peace-patch-aliases #f)
           )
         )
       )
@@ -217,13 +217,13 @@
 ;; traffic-engine update-alert-state) and still raises it when Jak hits civilians, but guards ignore
 ;; it, its music and minimap pulse are gone, its settings table has one level out of five (levels 1+
 ;; read past it) and its guard count returns nothing, so an alert never ends. While the toggle is on,
-;; ff-squad-control `update` runs mod-peaceful-haven-city-alert-update in its place.
+;; ff-squad-control `update` runs mod-haven-city-breath-of-peace-alert-update in its place.
 
 ;; Jak 2's five *alert-level-settings*, in Jak 3's squad-alert-state-settings layout (slots: 0 tazer,
 ;; 1 rifle, 2 grenade, 3 waster, 4 bike turret, 5 Hellcat turret). Level 0 is Jak 3's stock level 0
 ;; (3 tazers, 3 rifles, 1 grenadier). Levels 1-4 scale Jak 2's guard counts by Jak 3's denser stock
 ;; patrol (7 guards for Jak 2's 5) and keep Jak 2's aim, delay and burst values.
-(define *mod-peaceful-haven-city-alert-settings*
+(define *mod-haven-city-breath-of-peace-alert-settings*
   (new 'static 'inline-array squad-alert-state-settings 5
     ;; level 0: no alert (Jak 3 stock)
     (new 'static 'squad-alert-state-settings
@@ -297,12 +297,12 @@
 ;; Jak 2's city held only civilians and guards in peace time; Jak 3's war zones also lose Metal Heads
 ;; and robots to the guards, which must not count. Bits: civilians 0-3, guard-pilot 4, guard-a 6,
 ;; guard-b 7, civilian vehicles 17-22, guard vehicles 24-26.
-(define *mod-peaceful-haven-city-escalation-types* #x77e00df)
+(define *mod-haven-city-breath-of-peace-escalation-types* #x77e00df)
 
 ;; Last state of the alert toggle seen by the city code (edges reset the alert, see below).
-(define *mod-peaceful-haven-city-alert-was-on* #f)
+(define *mod-haven-city-breath-of-peace-alert-was-on* #f)
 
-(defun mod-peaceful-haven-city-hostile-count ((this ff-squad-control))
+(defun mod-haven-city-breath-of-peace-hostile-count ((this ff-squad-control))
   "Guards and Hellcats still hunting the target. The ending phase lasts until this is 0 (Jak 2 waited
    for every guard to be gone; Jak 3's denser patrols would keep an alert alive forever, so only the
    hunters count, and they stand down when the ending starts)."
@@ -340,7 +340,7 @@
     )
   )
 
-(defun mod-peaceful-haven-city-alert-notify ((this ff-squad-control) (hunt symbol))
+(defun mod-haven-city-breath-of-peace-alert-notify ((this ff-squad-control) (hunt symbol))
   "Jak 2 send-alert-events. hunt = #t: every guard turns on the target (the same hatred switch Jak 3
    uses when a guard is attacked, 'member-attacked) and every Hellcat gets 'alert-begin. hunt = #f:
    guards drop that hatred and their pursuit, Hellcats get 'alert-end. War-mode guards are skipped."
@@ -381,14 +381,14 @@
   (none)
   )
 
-(defun mod-peaceful-haven-city-alarm-off ((this ff-squad-control))
+(defun mod-haven-city-breath-of-peace-alarm-off ((this ff-squad-control))
   "Undo everything a running alert shows: minimap pulse, fight music, hunting guards and Hellcats."
   (when (logtest? (-> this alert-state flags) (squad-alert-flag alarm-on))
     (logclear! (-> this alert-state flags) (squad-alert-flag alarm-on))
     (set! (-> *game-info* wanted-flash) #f)
     ;; same key and value Jak 3 uses to end its own fight music (cty-faction, ctywide-deactivate)
     (persist-with-delay *setting-control* 'cty-faction-music 0 'music 'city1 0.0 0)
-    (mod-peaceful-haven-city-alert-notify this #f)
+    (mod-haven-city-breath-of-peace-alert-notify this #f)
     (logclear!
       (-> this alert-state target-status-array 0 flags)
       (squad-target-flag visible-now visible-recently visible-ever)
@@ -400,7 +400,7 @@
   (none)
   )
 
-(defun mod-peaceful-haven-city-alert-update ((this ff-squad-control))
+(defun mod-haven-city-breath-of-peace-alert-update ((this ff-squad-control))
   "Replaces ff-squad-control-method-45 while the alert toggle is on (hook in ff-squad-control `update`).
    Passes 1-2 are method-45's (raw offsets kept as decompiled) with the settings taken from Jak 2's
    five-level table; pass 3 is Jak 2's update-alert-state: 30 s timer refreshed by every offence,
@@ -411,7 +411,7 @@
     ;; pass 1: unit settings of the current level, per guard type, for the three faction modes
     (mem-copy!
       (the-as pointer (-> this settings))
-      (the-as pointer (-> *mod-peaceful-haven-city-alert-settings* (min 4 (the-as int (-> this alert-state level)))))
+      (the-as pointer (-> *mod-haven-city-breath-of-peace-alert-settings* (min 4 (the-as int (-> this alert-state level)))))
       320
       )
     (mem-copy! (the-as pointer (-> this settings-war)) (the-as pointer *ff-war-alert-state-settings*) 320)
@@ -488,7 +488,7 @@
         (cond
           ((logtest? (-> this alert-state flags) (squad-alert-flag alert-ending))
            (cond
-             ((> (mod-peaceful-haven-city-hostile-count this) 0)
+             ((> (mod-haven-city-breath-of-peace-hostile-count this) 0)
               (set-time! (-> this alert-state start-time))
               )
              ((time-elapsed? (-> this alert-state start-time) (seconds 3))
@@ -530,16 +530,16 @@
              (set! (-> this traffic object-type-info-array (traffic-type guard-a) target-counts m) 0)
              (set! (-> this traffic object-type-info-array (traffic-type guard-car) target-counts m) 0)
              )
-           (mod-peaceful-haven-city-alert-notify this #f)
+           (mod-haven-city-breath-of-peace-alert-notify this #f)
            )
           (else
-            (mod-peaceful-haven-city-alert-notify this #t)
+            (mod-haven-city-breath-of-peace-alert-notify this #t)
             )
           )
         ;; Jak 2 escalation: every 8 kills since the alert began raise it by one level
         (let ((kills 0))
           (dotimes (i 29)
-            (if (logtest? *mod-peaceful-haven-city-escalation-types* (ash 1 i))
+            (if (logtest? *mod-haven-city-breath-of-peace-escalation-types* (ash 1 i))
                 (+! kills (-> this traffic object-type-info-array i killed-count))
                 )
             )
@@ -551,24 +551,24 @@
           )
         )
       (else
-        (mod-peaceful-haven-city-alarm-off this)
+        (mod-haven-city-breath-of-peace-alarm-off this)
         )
       )
     )
   (none)
   )
 
-(defun mod-peaceful-haven-city-alert-counts ((this ff-squad-control))
+(defun mod-haven-city-breath-of-peace-alert-counts ((this ff-squad-control))
   "Alert bookkeeping after the stock update: start and stop from a clean state when the toggle flips
    (Jak 3 raises the alert silently on civilian hits, which must not become an instant alert), and
    give the alerted squad a guard pool big enough for its target count (cap: 20 per traffic type)."
-  (when (!= *mod-peaceful-haven-city-alert* *mod-peaceful-haven-city-alert-was-on*)
-    (set! *mod-peaceful-haven-city-alert-was-on* *mod-peaceful-haven-city-alert*)
-    (mod-peaceful-haven-city-alarm-off this)
+  (when (!= *mod-haven-city-breath-of-peace-alert* *mod-haven-city-breath-of-peace-alert-was-on*)
+    (set! *mod-haven-city-breath-of-peace-alert-was-on* *mod-haven-city-breath-of-peace-alert*)
+    (mod-haven-city-breath-of-peace-alarm-off this)
     (set! (-> this alert-state level) (the-as uint 0))
     (logclear! (-> this alert-state flags) (squad-alert-flag alert-ending))
     )
-  (when (and *mod-peaceful-haven-city-alert*
+  (when (and *mod-haven-city-breath-of-peace-alert*
              (> (-> this alert-state level) 0)
              (not (logtest? (-> this alert-state flags) (squad-alert-flag alert-ending war)))
              )
@@ -593,18 +593,18 @@
 ;; Pilot: a Freedom League guard seated in the Hellcat (Jak 2's crimson-guard-rider)
 ;; ---------------------------------------------------------------------------------------------
 
-(deftype mod-peaceful-haven-city-pilot (vehicle-rider)
+(deftype mod-haven-city-breath-of-peace-pilot (vehicle-rider)
   ()
   )
 
 ;; The guard's own model and animations (crimson-guard-ag, shipped in CTYPESA).
-(defskelgroup skel-mod-peaceful-haven-city-pilot crimson-guard crimson-guard-lod0-jg crimson-guard-idle-ja
+(defskelgroup skel-mod-haven-city-breath-of-peace-pilot crimson-guard crimson-guard-lod0-jg crimson-guard-idle-ja
               ((crimson-guard-lod0-mg (meters 20)) (crimson-guard-lod2-mg (meters 999999)))
               :bounds (static-spherem 0 0 0 3)
               :origin-joint-index 3
               )
 
-(defmethod initialize-collision ((this mod-peaceful-haven-city-pilot))
+(defmethod initialize-collision ((this mod-haven-city-breath-of-peace-pilot))
   "Stock rider setup, then bind the pilot to its Hellcat's level: the guard art lives in CTYPESA, not
    in ctywide where riders normally look (ctywide-entity-hack)."
   (call-parent-method this)
@@ -616,7 +616,7 @@
   (none)
   )
 
-(defmethod setup ((this mod-peaceful-haven-city-pilot))
+(defmethod setup ((this mod-haven-city-breath-of-peace-pilot))
   "Seat the pilot, show the meshes of a regular guard and play his seated stance
    (crimson-guard-car-stance-ja). crimson-guard-ag holds every variant at once: the masks are the
    ones crimson-guard-method-267 sets for a guard on foot (hide bits 1-4, then the blue body, 3),
@@ -629,12 +629,12 @@
   (none)
   )
 
-(defmethod setup-lods ((this mod-peaceful-haven-city-pilot))
+(defmethod setup-lods ((this mod-haven-city-breath-of-peace-pilot))
   "Load the guard skeleton. vr3 marks a guard rider: if he is ever knocked off, stock code turns him
    into a guard on foot and raises the alert to 2."
   (initialize-skeleton
     this
-    (the-as skeleton-group (art-group-get-by-name *level* "skel-mod-peaceful-haven-city-pilot" (the-as (pointer level) #f)))
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-mod-haven-city-breath-of-peace-pilot" (the-as (pointer level) #f)))
     (the-as pair 0)
     )
   (logior! (-> this flags) (vehicle-rider-flag vr0 vr3))
@@ -654,7 +654,7 @@
 
 ;; Jak 2's *hellcat-front-turret-control-info* (front gun, joint 4 "frontgun"), with the fields Jak 3
 ;; added: guard-shot rounds, 1 hit point each.
-(define *mod-peaceful-haven-city-hellcat-turret*
+(define *mod-haven-city-breath-of-peace-hellcat-turret*
   (new 'static 'turret-control-info
     :joint-index 4
     :barrel-count 1
@@ -679,11 +679,11 @@
     )
   )
 
-(set! (-> *mod-peaceful-haven-city-hellcat-turret* shot-type) guard-shot)
+(set! (-> *mod-haven-city-breath-of-peace-hellcat-turret* shot-type) guard-shot)
 
 ;; Turret fire settings used when no Freedom League squad is up (normally the live Hellcat slot of
 ;; *ff-squad-control*, which the alert updates per level).
-(define *mod-peaceful-haven-city-hellcat-fire*
+(define *mod-haven-city-breath-of-peace-hellcat-fire*
   (new 'static 'squad-unit-settings :shot-count 2 :rand-shot-count 1 :inaccuracy 0.5
     :acquire-delay (seconds 1) :shot-delay (seconds 0.25) :burst-delay (seconds 5))
   )
@@ -778,11 +778,11 @@
   (set! (-> this rider-hand-joint-array 0) 3)
   (set! (-> this rider-hand-joint-array 1) 3)
   (init (-> this turret-jm) this (the-as uint 4) (joint-mod-base-flags attached))
-  (set-info (-> this turret) *mod-peaceful-haven-city-hellcat-turret*)
+  (set-info (-> this turret) *mod-haven-city-breath-of-peace-hellcat-turret*)
   (set! (-> this turret ignore-handle) (process->handle this))
   (set! (-> this turret guard-settings) (if *ff-squad-control*
                                             (get-unit-settings-by-idx *ff-squad-control* 5)
-                                            *mod-peaceful-haven-city-hellcat-fire*
+                                            *mod-haven-city-breath-of-peace-hellcat-fire*
                                             )
         )
   (set! (-> this pursuit-target) (the-as handle #f))
@@ -821,12 +821,12 @@
 
 (defmethod vehicle-method-133 ((this h-hellcat) (arg0 traffic-object-spawn-params))
   "Rider spawn: a Freedom League pilot instead of a civilian."
-  (vehicle-rider-spawn this mod-peaceful-haven-city-pilot arg0)
+  (vehicle-rider-spawn this mod-haven-city-breath-of-peace-pilot arg0)
   0
   (none)
   )
 
-(defun mod-peaceful-haven-city-hellcat-engage ((this h-hellcat) (tgt process))
+(defun mod-haven-city-breath-of-peace-hellcat-engage ((this h-hellcat) (tgt process))
   "Mark the Hellcat alerted against tgt. The pursuit itself starts once the target is in sight."
   (logior! (-> this v-flags) (vehicle-flag alert))
   (set! (-> this pursuit-target) (process->handle tgt))
@@ -834,7 +834,7 @@
   (none)
   )
 
-(defun mod-peaceful-haven-city-hellcat-stand-down ((this h-hellcat))
+(defun mod-haven-city-breath-of-peace-hellcat-stand-down ((this h-hellcat))
   "Jak 2 'alert-end / 'end-pursuit: drop the alert and the pursuit, rejoin the traffic lanes."
   (logclear! (-> this v-flags) (vehicle-flag persistent alert in-pursuit))
   (set! (-> this pursuit-target) (the-as handle #f))
@@ -843,7 +843,7 @@
   (none)
   )
 
-(defun mod-peaceful-haven-city-hellcat-sight ((this h-hellcat))
+(defun mod-haven-city-breath-of-peace-hellcat-sight ((this h-hellcat))
   "Jak 2 vehicle-guard-method-150 on Jak 3's squad: refresh line of sight to the pursuit target
    (squad-control-method-17, staggered by traffic id), begin the pursuit on first sight, end it when
    the target is gone."
@@ -872,7 +872,7 @@
   (none)
   )
 
-(defun mod-peaceful-haven-city-hellcat-steer ((this h-hellcat) (tgt process-focusable))
+(defun mod-haven-city-breath-of-peace-hellcat-steer ((this h-hellcat) (tgt process-focusable))
   "Jak 2 vehicle-guard-method-152 on Jak 3's vehicle-controller: while the target is in sight and
    coming at us, fly straight (direct-mode) at the point where it will be when we meet, else take
    the turn toward its position; then add up to twice the top speed while pointing at it."
@@ -941,12 +941,12 @@
                 (-> arg3 param 0)
                 (>= (get-alert-level (-> this squad)) 2)
                 )
-       (mod-peaceful-haven-city-hellcat-engage this (the-as process (-> arg3 param 0)))
+       (mod-haven-city-breath-of-peace-hellcat-engage this (the-as process (-> arg3 param 0)))
        )
      )
     (('alert-end 'end-pursuit)
      (if (and (logtest? (vehicle-flag alert) (-> this v-flags)) (not (logtest? (vehicle-flag dead) (-> this v-flags))))
-         (mod-peaceful-haven-city-hellcat-stand-down this)
+         (mod-haven-city-breath-of-peace-hellcat-stand-down this)
          )
      )
     (else
@@ -959,8 +959,8 @@
   "Called by the stock attack handler when Jak hits this AI-flown Hellcat (constants flag #x4).
    Jak 2 vehicle-method-134: with the alert system on, the attack raises the alert to 2 and the
    Hellcat goes after Jak."
-  (when (and *mod-peaceful-haven-city-alert* *target*)
-    (mod-peaceful-haven-city-hellcat-engage this *target*)
+  (when (and *mod-haven-city-breath-of-peace-alert* *target*)
+    (mod-haven-city-breath-of-peace-hellcat-engage this *target*)
     (vehicle-method-107 this 2 *target*)
     )
   0
@@ -973,7 +973,7 @@
     ;; Jak 2 vehicle-guard active: an alerted Hellcat looks for its target for 8 s, chases on sight
     ;; (`go` from a :post returns: the state changes next frame, so the branches stay exclusive)
     (when (logtest? (vehicle-flag alert) (-> self v-flags))
-      (mod-peaceful-haven-city-hellcat-sight self)
+      (mod-haven-city-breath-of-peace-hellcat-sight self)
       (cond
         ((logtest? (vehicle-flag in-pursuit) (-> self v-flags))
          (logior! (-> self v-flags) (vehicle-flag persistent))
@@ -999,7 +999,7 @@
   :post (behavior ()
     ;; Jak 2 vehicle-guard hostile: give up after 8 s without sight, or after 0.5 s when two other
     ;; units already see the target; otherwise shoot when in sight and steer after it
-    (mod-peaceful-haven-city-hellcat-sight self)
+    (mod-haven-city-breath-of-peace-hellcat-sight self)
     (if (and (logtest? (vehicle-flag in-pursuit) (-> self v-flags))
              (or (time-elapsed? (-> self target-in-sight-time) (seconds 8))
                  (and (>= (-> self squad alert-state guards-in-sight-of-target) 2)
@@ -1015,11 +1015,11 @@
          (if (logtest? (vehicle-flag target-in-sight) (-> self v-flags))
              (turret-control-method-11 (-> self turret) self (get-trans tgt 3) (get-transv tgt))
              )
-         (mod-peaceful-haven-city-hellcat-steer self tgt)
+         (mod-haven-city-breath-of-peace-hellcat-steer self tgt)
          )
         (else
           ;; target gone or pursuit dropped (`go` from a :post returns, hence the exclusive branch)
-          (mod-peaceful-haven-city-hellcat-stand-down self)
+          (mod-haven-city-breath-of-peace-hellcat-stand-down self)
           )
         )
       )
@@ -1045,10 +1045,10 @@
   )
 
 ;; Hellcats out at once (traffic cap: 20 per type). Jak 2 added two Hellcats from alert level 3.
-(defconstant MOD_PEACEFUL_HAVEN_CITY_HELLCATS 3)
-(defconstant MOD_PEACEFUL_HAVEN_CITY_HELLCATS_ALERT 5)
+(defconstant MOD_HAVEN_CITY_BREATH_OF_PEACE_HELLCATS 3)
+(defconstant MOD_HAVEN_CITY_BREATH_OF_PEACE_HELLCATS_ALERT 5)
 
-(defun mod-peaceful-haven-city-hellcat-update ((this ff-squad-control))
+(defun mod-haven-city-breath-of-peace-hellcat-update ((this ff-squad-control))
   "Hellcat traffic bookkeeping. While the toggle is on and CTYPESA (art) is loaded: register its level
    for vehicle-type h-hellcat (lwide-deactivate clears it when CTYPESA unloads) and set the guard-car
    pool and activation caps, which stock code zeroes every frame. Toggle off: clear both and recall
@@ -1057,21 +1057,21 @@
         (ti (-> this traffic object-type-info-array (traffic-type guard-car)))
         )
     (cond
-      ((and *mod-peaceful-haven-city-hellcats* (= (level-status? *level* 'ctypesa #f) 'active))
+      ((and *mod-haven-city-breath-of-peace-hellcats* (= (level-status? *level* 'ctypesa #f) 'active))
        ;; also after a traffic restart (death, checkpoint), which resets every type's level to #f
        (when (or (!= (-> info vehicle-levels (vehicle-type h-hellcat)) 'ctypesa) (!= (-> ti level) 'ctypesa))
          (set! (-> info vehicle-levels (vehicle-type h-hellcat)) 'ctypesa)
          (update-level-info (the-as level #f))
          )
-       (let ((n (if (and *mod-peaceful-haven-city-alert* (>= (-> this alert-state level) (the-as uint 3)))
-                    MOD_PEACEFUL_HAVEN_CITY_HELLCATS_ALERT
-                    MOD_PEACEFUL_HAVEN_CITY_HELLCATS
+       (let ((n (if (and *mod-haven-city-breath-of-peace-alert* (>= (-> this alert-state level) (the-as uint 3)))
+                    MOD_HAVEN_CITY_BREATH_OF_PEACE_HELLCATS_ALERT
+                    MOD_HAVEN_CITY_BREATH_OF_PEACE_HELLCATS
                     )
                 )
              )
          (set! (-> ti want-count) n)
          ;; the alert's ending phase zeroed the caps already this frame: keep that block
-         (when (not (and *mod-peaceful-haven-city-alert*
+         (when (not (and *mod-haven-city-breath-of-peace-alert*
                          (logtest? (-> this alert-state flags) (squad-alert-flag alert-ending))
                          )
                     )
@@ -1110,17 +1110,17 @@
 
 ;; Citizens' pools while the streets are busier (stock 10, 10, 3; engine cap 20 per type). The fat
 ;; citizen goes from at most 1 in 10 to about 1 in 4.
-(defconstant MOD_PEACEFUL_HAVEN_CITY_CROWD_MALE 16)
-(defconstant MOD_PEACEFUL_HAVEN_CITY_CROWD_FEMALE 16)
-(defconstant MOD_PEACEFUL_HAVEN_CITY_CROWD_FAT 10)
+(defconstant MOD_HAVEN_CITY_BREATH_OF_PEACE_CROWD_MALE 16)
+(defconstant MOD_HAVEN_CITY_BREATH_OF_PEACE_CROWD_FEMALE 16)
+(defconstant MOD_HAVEN_CITY_BREATH_OF_PEACE_CROWD_FAT 10)
 
 ;; Guard caps multiplier (stock 1.0: 3 tazers, 3 rifles, 1 grenadier; 1.7 gives 5, 5, 1).
-(defconstant MOD_PEACEFUL_HAVEN_CITY_CROWD_GUARDS 1.7)
+(defconstant MOD_HAVEN_CITY_BREATH_OF_PEACE_CROWD_GUARDS 1.7)
 
 ;; Last state of the toggle seen by the city code, to restore stock caps once on switch-off.
-(define *mod-peaceful-haven-city-crowds-was-on* #f)
+(define *mod-haven-city-breath-of-peace-crowds-was-on* #f)
 
-(defun mod-peaceful-haven-city-crowd-type ((te traffic-engine) (type traffic-type) (pool int))
+(defun mod-haven-city-breath-of-peace-crowd-type ((te traffic-engine) (type traffic-type) (pool int))
   "Raise one citizen type's pool to `pool` and its cap to pool - 1 (as restore-default-settings
    computes it). Skipped while the story turns that type off (stock pool 0)."
   (let ((ti (-> te object-type-info-array type)))
@@ -1132,26 +1132,26 @@
   (none)
   )
 
-(defun mod-peaceful-haven-city-crowds-update ((this ff-squad-control))
+(defun mod-haven-city-breath-of-peace-crowds-update ((this ff-squad-control))
   "Per-frame crowd driver, after the stock pools of the frame are written. On: bigger citizen pools
    and caps, guard caps x1.7 (applied by the alert pass of the next frame) with a pool to match.
    Switched off: guard multiplier back to 1.0 and citizen caps back to pool - 1 from stock pools."
   (let ((te (-> this traffic)))
     (cond
-      (*mod-peaceful-haven-city-crowds*
-        (set! *mod-peaceful-haven-city-crowds-was-on* #t)
-        (set-guard-target-level this MOD_PEACEFUL_HAVEN_CITY_CROWD_GUARDS)
-        (mod-peaceful-haven-city-crowd-type te (traffic-type civilian-male) MOD_PEACEFUL_HAVEN_CITY_CROWD_MALE)
-        (mod-peaceful-haven-city-crowd-type te (traffic-type civilian-female) MOD_PEACEFUL_HAVEN_CITY_CROWD_FEMALE)
-        (mod-peaceful-haven-city-crowd-type te (traffic-type civilian-fat) MOD_PEACEFUL_HAVEN_CITY_CROWD_FAT)
+      (*mod-haven-city-breath-of-peace-crowds*
+        (set! *mod-haven-city-breath-of-peace-crowds-was-on* #t)
+        (set-guard-target-level this MOD_HAVEN_CITY_BREATH_OF_PEACE_CROWD_GUARDS)
+        (mod-haven-city-breath-of-peace-crowd-type te (traffic-type civilian-male) MOD_HAVEN_CITY_BREATH_OF_PEACE_CROWD_MALE)
+        (mod-haven-city-breath-of-peace-crowd-type te (traffic-type civilian-female) MOD_HAVEN_CITY_BREATH_OF_PEACE_CROWD_FEMALE)
+        (mod-haven-city-breath-of-peace-crowd-type te (traffic-type civilian-fat) MOD_HAVEN_CITY_BREATH_OF_PEACE_CROWD_FAT)
         (let ((ti (-> te object-type-info-array (traffic-type guard-a))))
           (if (> (-> ti want-count) 0)
               (set! (-> ti want-count) (max (-> ti want-count) (min 20 (+ (-> ti target-count) 4))))
               )
           )
         )
-      (*mod-peaceful-haven-city-crowds-was-on*
-        (set! *mod-peaceful-haven-city-crowds-was-on* #f)
+      (*mod-haven-city-breath-of-peace-crowds-was-on*
+        (set! *mod-haven-city-breath-of-peace-crowds-was-on* #f)
         (set-guard-target-level this 1.0)
         (dotimes (i 3)
           (let ((ti (-> te object-type-info-array i)))
@@ -1168,13 +1168,13 @@
 ;; Entry point
 ;; ================================================================================================
 
-(defun mod-peaceful-haven-city-update ((this ff-squad-control))
+(defun mod-haven-city-breath-of-peace-update ((this ff-squad-control))
   "Called at the end of ff-squad-control `update` (hook in ff-squad-control.gc), once per frame while
    the city traffic runs, after every stock write of the frame and before the traffic manager spawns:
    whatever is set here is what spawning sees."
-  (mod-peaceful-haven-city-alert-counts this)
-  (mod-peaceful-haven-city-crowds-update this)
-  (mod-peaceful-haven-city-peace-update)
-  (mod-peaceful-haven-city-hellcat-update this)
+  (mod-haven-city-breath-of-peace-alert-counts this)
+  (mod-haven-city-breath-of-peace-crowds-update this)
+  (mod-haven-city-breath-of-peace-peace-update)
+  (mod-haven-city-breath-of-peace-hellcat-update this)
   (none)
   )

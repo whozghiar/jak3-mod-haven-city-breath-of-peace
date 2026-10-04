@@ -122,7 +122,7 @@
 
   // turn this on to extract level background graphics data as .fr3 files in out/<game>/fr3
   "levels_extract": true,
-  // MOD peaceful-haven-city: the Freedom League Hellcat ships in CTYPESA (the guards' borrow level), so
+  // MOD haven-city-breath-of-peace: the Freedom League Hellcat ships in CTYPESA (the guards' borrow level), so
   // its merc geometry must be baked into ctypesa.fr3. Home DGO = where its textures are remapped.
   "extra_art_groups_by_dgo": {
     "CTYPESA.DGO": ["hellcat-ag:CTYCARC.DGO"]

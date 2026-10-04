@@ -14,7 +14,7 @@ combined freely.
 |---|---|
 | Peace in Haven City | Freedom League guards in every district, Metal Head zone included. Citizens in every district except the Metal Head zone. No Krimson Guard robots and no Metal Heads (traffic and flitter spawners). Steps aside while a mission drives the city's factions. |
 | Jak 2 alert system | Jak 2's wanted level: hitting a civilian or attacking a guard starts an alert (levels 0-4), guards then hunt Jak, the city plays its battle music and the minimap pulses red. Every 8 kills raise the level. The alert lasts 30 s after the last offence (faster while Jak hides), then ends once no guard or Hellcat hunts anymore. |
-| Freedom League Hellcats | Three Hellcats piloted by Freedom League guards fly in the city's air traffic (five from alert level 3). With the alert system on they chase and shoot Jak from alert level 2, or when he attacks one. Jak can steal one like a city car: its pilot is knocked off and turns into a guard on foot, which raises the alert to 2. |
+| Freedom League Hellcats | Three Hellcats piloted by Freedom League guards fly in the city's air traffic (five from alert level 3). With the alert system on they chase and shoot Jak from alert level 2, or when he attacks one. Jak can steal one like a city car: its pilot is knocked off and turns into a guard on foot, which raises the alert to 2. Flying it, Jak fires its front gun with R1. |
 | Busier streets | Citizen pools 16 male, 16 female, 10 fat (stock 10, 10, 3), so about one citizen in four is a fat citizen. Guard caps x1.7 (11 instead of 7 at alert level 0). Only types the story currently allows get more. |
 
 ## 2. Files
@@ -110,7 +110,12 @@ and `skel-h-hellcat`, but never defines the class nor loads its art (`CTYCARC`).
   pilot off (`target-pilot.gc`); his `vr3` flag turns him into a guard on foot and raises the alert
   to 2. Entering `player-control` drops the Hellcat's alert and chase, so the alert stops counting
   it as a hunter. While Jak flies it, the game holds `ctypesa` loaded (`'player-enter-vehicle`
-  sets `borrow-hold-perm` to the type's level).
+  sets `borrow-hold-perm` to the type's level);
+- gives Jak its gun: `vehicle-method-94`, the per-frame camera update while he flies it, aims the
+  front gun 40 m straight ahead with no spread and fires on R1 every 0.35 s (Jak 2 vehicle-guard
+  player gunnery). R1 is free on the Hellcat (constants flag `#x800` off, which would map it to
+  the L1 action); R2 still changes altitude. The rounds are owned by Jak, so they raise the alert
+  like his own shots.
 
 Without peace, Hellcats only patrol where Freedom League guards may spawn (they share the guards'
 faction slot and art level).
@@ -158,6 +163,7 @@ After switching from another mod, compile with the forced build described in
 | Hellcats and alert on, shoot a Hellcat | It chases Jak and fires its front gun. |
 | Hellcat pilot | Blue guard, no dark guard mesh, no weapon. |
 | Steal a Hellcat (triangle) | Jak flies it; the pilot drops as a guard on foot and the alert reaches 2. |
+| Fly a stolen Hellcat, hold R1 | The front gun fires straight ahead about three times a second. |
 | Busier streets on | Noticeably more citizens and guards, about one fat citizen in four. |
 | Die during an alert | Respawn without the alert, Hellcats still spawn. |
 
@@ -165,8 +171,8 @@ After switching from another mod, compile with the forced build described in
 
 - Jak 2's Dark Jak alert triggers (transforming raised the alert) are not ported.
 - Jak 2's alarm sound effect is not played: the alert uses the battle music only.
-- Jak cannot fire the Hellcat's front gun nor his own gun while flying it (constants flag `#x20`
-  off, unlike the city cars).
+- Jak cannot use his own gun while flying a Hellcat (constants flag `#x20` off, unlike the city
+  cars): the Hellcat's front gun replaces it.
 - The global launcher catalog key `peaceful-haven-city` is also the Jak 2 mod's key: on release,
   the catalog keeps one of the two (`sync_global_catalog.py` warns and the newest release wins).
 
@@ -176,3 +182,4 @@ After switching from another mod, compile with the forced build described in
 |---|---|
 | 2026-10-04 | First version: peace, Jak 2 alert system, Freedom League Hellcats. Compiles (forced build, 3508 targets), `hellcat-ag` baked into `ctypesa.fr3`. Played by the user: the three features work. Open: the pilot shows every guard mesh variant at once, and Jak can hang on a Hellcat but not fly it. |
 | 2026-10-04 | Pilot shows a regular blue guard (guard mesh masks). Hellcats can be stolen (no `no-hijack`; alert dropped on boarding). New toggle "Busier streets": bigger citizen and guard pools, about one fat citizen in four. Played by the user: all three work, engine sound fine while Jak flies a Hellcat. |
+| 2026-10-04 | Jak fires the stolen Hellcat's front gun with R1. Played by the user: works. |

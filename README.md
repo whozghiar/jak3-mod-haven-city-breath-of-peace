@@ -21,7 +21,7 @@ Open the Mods menu in game with **L3 + SELECT**, then **peaceful-haven-city**. E
 
 - **Peace in Haven City:** Freedom League guards patrol every district, the Metal Head zone included, and citizens walk every district except the Metal Head zone. Krimson Guard robots and Metal Heads no longer appear. Story missions that need enemies still get them.
 - **Jak 2 alert system:** hurt a citizen or attack a guard and the city goes on alert, as in Jak 2: five alert levels, guards hunting you, battle music and a red-pulsing minimap. Keep fighting and the alert climbs; lie low for about 30 seconds and it ends once the guards stand down.
-- **Freedom League Hellcats:** Hellcat gunships flown by Freedom League guards join the city's air traffic in every district. With the alert system on, they chase and shoot you from alert level 2, or as soon as you attack one. Press Triangle next to one to steal it, like any city car (the guards will not like it).
+- **Freedom League Hellcats:** Hellcat gunships flown by Freedom League guards join the city's air traffic in every district. With the alert system on, they chase and shoot you from alert level 2, or as soon as you attack one. Press Triangle next to one to steal it, like any city car (the guards will not like it), then hold R1 to fire its front gun.
 - **Busier streets:** more citizens and more guards in the streets, and more of the fat citizens among them.
 
 ## Download & Play via OpenGOAL Launcher (Players)

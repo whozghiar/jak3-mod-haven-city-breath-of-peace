@@ -799,6 +799,26 @@
   (none)
   )
 
+(defmethod vehicle-method-94 ((this h-hellcat))
+  "Per-frame camera update while Jak flies the Hellcat (vehicle-method-77, camera flag), extended
+   with Jak 2's player gunnery (vehicle-guard vehicle-method-94): the front gun aims straight ahead,
+   40 m out, with no spread, and R1 fires a round every 0.35 s. Rounds are owned by Jak, so hitting
+   citizens or guards raises the alert like his own gun."
+  (let ((aim (new 'stack-no-clear 'vector)))
+    (vector+float*! aim (-> this rbody position) (-> this rbody matrix fvec) 163840.0)
+    (set! (-> this turret inaccuracy) 0.0)
+    (turret-control-method-9 (-> this turret) this aim (vector-reset! (new 'stack-no-clear 'vector)))
+    )
+  (when (and (cpad-hold? 0 r1) (not *pause-lock*) (time-elapsed? (-> this turret shoot-time) (seconds 0.35)))
+    (set! (-> this turret owner-handle) (process->handle *target*))
+    (turret-control-method-17 (-> this turret) this)
+    (set! (-> this turret owner-handle) (the-as handle #f))
+    )
+  ((method-of-type hvehicle vehicle-method-94) this)
+  0
+  (none)
+  )
+
 (defmethod vehicle-method-133 ((this h-hellcat) (arg0 traffic-object-spawn-params))
   "Rider spawn: a Freedom League pilot instead of a civilian."
   (vehicle-rider-spawn this mod-peaceful-haven-city-pilot arg0)

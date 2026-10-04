@@ -5,7 +5,7 @@
 ;; dgos: CWI
 ;;
 ;; Peaceful Haven City -- gameplay half of the mod, linked in CWI (ctywide) right after
-;; ctywide-init.o so every city type it touches already exists. Three features, each one driven by a
+;; ctywide-init.o so every city type it touches already exists. Four features, each one driven by a
 ;; GAME-resident toggle of peaceful-haven-city-menu.gc and applied from the city's own per-frame
 ;; update (ff-squad-control `update`, hooked in ff-squad-control.gc), so nothing runs outside the city:
 ;;
@@ -15,7 +15,8 @@
 ;;      Jak 2's five alert levels, 30 s timer, ending phase, kill escalation, guards and Hellcats
 ;;      hunting Jak, alert music and the red minimap pulse.
 ;;   3. Freedom League Hellcats: the `h-hellcat` class Jak 3 declares but never defines, a Freedom
-;;      League pilot, air-traffic spawning, and Jak 2's guard-vehicle pursuit.
+;;      League pilot, air-traffic spawning, and Jak 2's guard-vehicle pursuit. Jak can steal them.
+;;   4. Busier streets: larger citizen and guard pools, with more fat citizens in the mix.
 ;;
 ;; Technical notes and the change log: docs/modding/current_mod/peaceful-haven-city_readme.md.
 
@@ -23,6 +24,7 @@
 (define-extern *mod-peaceful-haven-city-peace* symbol)
 (define-extern *mod-peaceful-haven-city-alert* symbol)
 (define-extern *mod-peaceful-haven-city-hellcats* symbol)
+(define-extern *mod-peaceful-haven-city-crowds* symbol)
 (define-extern *mod-peaceful-haven-city-peace-active* symbol)
 (define-extern *mod-peaceful-haven-city-peace-alias* pair)
 (define-extern *mod-peaceful-haven-city-city-aliases* (array symbol))
@@ -323,7 +325,11 @@
       (dotimes (i (the-as int (-> trk active-object-count)))
         (when (= (-> trk active-object-type-list i) (traffic-type guard-car))
           (let ((v (the-as vehicle (handle->process (-> trk active-object-list i)))))
-            (if (and v (not (focus-test? v dead inactive)) (logtest? (vehicle-flag alert) (-> v v-flags)))
+            (if (and v
+                     (not (focus-test? v dead inactive))
+                     (logtest? (vehicle-flag alert) (-> v v-flags))
+                     (not (logtest? (vehicle-flag player-driving) (-> v v-flags)))
+                     )
                 (+! n 1)
                 )
             )
@@ -611,8 +617,13 @@
   )
 
 (defmethod setup ((this mod-peaceful-haven-city-pilot))
-  "Seat the pilot and play the guard's seated stance (crimson-guard-car-stance-ja)."
+  "Seat the pilot, show the meshes of a regular guard and play his seated stance
+   (crimson-guard-car-stance-ja). crimson-guard-ag holds every variant at once: the masks are the
+   ones crimson-guard-method-267 sets for a guard on foot (hide bits 1-4, then the blue body, 3),
+   without the weapon bit (8 rifle, 16 tazer/grenade) and never the dark guard body (5)."
   (call-parent-method this)
+  (setup-masks (-> this draw) 0 30)
+  (setup-masks (-> this draw) 3 0)
   (set! (-> this riding-anim) 36)
   0
   (none)
@@ -754,8 +765,9 @@
   )
 
 (defmethod init-rbody-control! ((this h-hellcat))
-  "Skeleton (from CTYPESA through the vehicle's level), Jak 3's stock Hellcat physics, the front
-   turret, and the Freedom League marks: a guard (never targeted by guards) that Jak cannot hijack."
+  "Skeleton (from CTYPESA through the vehicle's level), Jak 3's stock Hellcat physics (same pilot
+   stance and vehicle type as the city cars, so Jak can steal and fly it), the front turret, and the
+   Freedom League mark: a guard, never targeted by guards."
   (initialize-skeleton
     this
     (the-as skeleton-group (art-group-get-by-name *level* "skel-h-hellcat" (the-as (pointer level) #f)))
@@ -776,7 +788,6 @@
   (set! (-> this pursuit-target) (the-as handle #f))
   (set! (-> this target-status handle) (the-as handle #f))
   (logior! (-> this mask) (process-mask guard))
-  (logior! (-> this v-flags) (vehicle-flag no-hijack))
   0
   (none)
   )
@@ -905,7 +916,7 @@
    off-screen pursuer) stand it down."
   (case arg2
     (('alert-begin)
-     (when (and (not (logtest? (vehicle-flag dead alert) (-> this v-flags)))
+     (when (and (not (logtest? (vehicle-flag dead alert player-driving) (-> this v-flags)))
                 (logtest? (vehicle-flag ai-driving) (-> this v-flags))
                 (-> arg3 param 0)
                 (>= (get-alert-level (-> this squad)) 2)
@@ -997,6 +1008,22 @@
     )
   )
 
+(defstate player-control (h-hellcat)
+  :virtual #t
+  :enter (behavior ()
+    ;; Jak stole it (the stock boarding code already knocked the pilot off, see the pilot's vr3):
+    ;; drop any alert or chase, so the alert no longer counts it as a hunter, then hvehicle's entry
+    (logclear! (-> self v-flags) (vehicle-flag alert in-pursuit target-in-sight))
+    (set! (-> self pursuit-target) (the-as handle #f))
+    (logclear! (-> self controller flags) (vehicle-controller-flag direct-mode ignore-others no-slowing-for-turns))
+    (let ((t9-0 (-> (method-of-type hvehicle player-control) enter)))
+      (if t9-0
+          (t9-0)
+          )
+      )
+    )
+  )
+
 ;; Hellcats out at once (traffic cap: 20 per type). Jak 2 added two Hellcats from alert level 3.
 (defconstant MOD_PEACEFUL_HAVEN_CITY_HELLCATS 3)
 (defconstant MOD_PEACEFUL_HAVEN_CITY_HELLCATS_ALERT 5)
@@ -1051,6 +1078,73 @@
   )
 
 ;; ================================================================================================
+;; 4. Busier streets
+;; ================================================================================================
+;;
+;; How many pedestrians of each type walk at once: each activation picks the type furthest below its
+;; cap (target-count, the peace-time one), within its pool (want-count, rewritten every frame from the
+;; faction spawn level: 10 male, 10 female, 3 fat by default). Stock never refreshes the citizens' caps
+;; after restore-default-settings, which sets them to pool - 1 from the pools of that moment: the fat
+;; citizen often sits at a cap of 0 (pool 1 when the traffic starts) or 2. Guards are capped by the
+;; alert settings times guard-target-level.
+
+;; Citizens' pools while the streets are busier (stock 10, 10, 3; engine cap 20 per type). The fat
+;; citizen goes from at most 1 in 10 to about 1 in 4.
+(defconstant MOD_PEACEFUL_HAVEN_CITY_CROWD_MALE 16)
+(defconstant MOD_PEACEFUL_HAVEN_CITY_CROWD_FEMALE 16)
+(defconstant MOD_PEACEFUL_HAVEN_CITY_CROWD_FAT 10)
+
+;; Guard caps multiplier (stock 1.0: 3 tazers, 3 rifles, 1 grenadier; 1.7 gives 5, 5, 1).
+(defconstant MOD_PEACEFUL_HAVEN_CITY_CROWD_GUARDS 1.7)
+
+;; Last state of the toggle seen by the city code, to restore stock caps once on switch-off.
+(define *mod-peaceful-haven-city-crowds-was-on* #f)
+
+(defun mod-peaceful-haven-city-crowd-type ((te traffic-engine) (type traffic-type) (pool int))
+  "Raise one citizen type's pool to `pool` and its cap to pool - 1 (as restore-default-settings
+   computes it). Skipped while the story turns that type off (stock pool 0)."
+  (let ((ti (-> te object-type-info-array type)))
+    (when (> (-> ti want-count) 0)
+      (set! (-> ti want-count) pool)
+      (set! (-> ti target-count) (+ pool -1))
+      )
+    )
+  (none)
+  )
+
+(defun mod-peaceful-haven-city-crowds-update ((this ff-squad-control))
+  "Per-frame crowd driver, after the stock pools of the frame are written. On: bigger citizen pools
+   and caps, guard caps x1.7 (applied by the alert pass of the next frame) with a pool to match.
+   Switched off: guard multiplier back to 1.0 and citizen caps back to pool - 1 from stock pools."
+  (let ((te (-> this traffic)))
+    (cond
+      (*mod-peaceful-haven-city-crowds*
+        (set! *mod-peaceful-haven-city-crowds-was-on* #t)
+        (set-guard-target-level this MOD_PEACEFUL_HAVEN_CITY_CROWD_GUARDS)
+        (mod-peaceful-haven-city-crowd-type te (traffic-type civilian-male) MOD_PEACEFUL_HAVEN_CITY_CROWD_MALE)
+        (mod-peaceful-haven-city-crowd-type te (traffic-type civilian-female) MOD_PEACEFUL_HAVEN_CITY_CROWD_FEMALE)
+        (mod-peaceful-haven-city-crowd-type te (traffic-type civilian-fat) MOD_PEACEFUL_HAVEN_CITY_CROWD_FAT)
+        (let ((ti (-> te object-type-info-array (traffic-type guard-a))))
+          (if (> (-> ti want-count) 0)
+              (set! (-> ti want-count) (max (-> ti want-count) (min 20 (+ (-> ti target-count) 4))))
+              )
+          )
+        )
+      (*mod-peaceful-haven-city-crowds-was-on*
+        (set! *mod-peaceful-haven-city-crowds-was-on* #f)
+        (set-guard-target-level this 1.0)
+        (dotimes (i 3)
+          (let ((ti (-> te object-type-info-array i)))
+            (set! (-> ti target-count) (max 0 (+ (-> ti want-count) -1)))
+            )
+          )
+        )
+      )
+    )
+  (none)
+  )
+
+;; ================================================================================================
 ;; Entry point
 ;; ================================================================================================
 
@@ -1059,6 +1153,7 @@
    the city traffic runs, after every stock write of the frame and before the traffic manager spawns:
    whatever is set here is what spawning sees."
   (mod-peaceful-haven-city-alert-counts this)
+  (mod-peaceful-haven-city-crowds-update this)
   (mod-peaceful-haven-city-peace-update)
   (mod-peaceful-haven-city-hellcat-update this)
   (none)

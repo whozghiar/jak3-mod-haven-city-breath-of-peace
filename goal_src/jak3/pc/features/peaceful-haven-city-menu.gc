@@ -4,7 +4,7 @@
 ;; name: peaceful-haven-city-menu.gc
 ;; dgos: GAME
 ;;
-;; Peaceful Haven City -- GAME-resident half of the mod: the three Mods-menu toggles
+;; Peaceful Haven City -- GAME-resident half of the mod: the four Mods-menu toggles
 ;; ([L3 + SELECT] > Mods > peaceful-haven-city) and the data the city code points the game at.
 ;;
 ;; Why this file is in GAME and not with the gameplay code (CWI, peaceful-haven-city.gc):
@@ -15,7 +15,7 @@
 ;;
 ;; The menu only flips flags. The city code reads them every frame and applies or undoes each
 ;; feature on its own (no CWI function is ever called from here, so nothing dangles when CWI unloads).
-;; Every feature ships OFF: with the three flags #f the game plays as stock.
+;; Every feature ships OFF: with the four flags #f the game plays as stock.
 
 ;; ------------------------------------------------------------------------------------------------
 ;; Player toggles (read every frame by peaceful-haven-city.gc)
@@ -31,6 +31,10 @@
 
 ;; Freedom League Hellcat patrols in the city's air traffic.
 (define *mod-peaceful-haven-city-hellcats* #f)
+
+;; Busier streets: more citizens (a larger share of them fat citizens) and more guards wherever the
+;; city already has some.
+(define *mod-peaceful-haven-city-crowds* #f)
 
 ;; ------------------------------------------------------------------------------------------------
 ;; State shared with vanilla files (written by peaceful-haven-city.gc)
@@ -80,6 +84,12 @@
            :is-toggled? (lambda () *mod-peaceful-haven-city-hellcats*)
            :on-confirm (lambda ()
                          (set! *mod-peaceful-haven-city-hellcats* (not *mod-peaceful-haven-city-hellcats*))
+                         (none))
+           )
+      (new 'static 'popup-menu-flag :label "Busier streets"
+           :is-toggled? (lambda () *mod-peaceful-haven-city-crowds*)
+           :on-confirm (lambda ()
+                         (set! *mod-peaceful-haven-city-crowds* (not *mod-peaceful-haven-city-crowds*))
                          (none))
            )
       )

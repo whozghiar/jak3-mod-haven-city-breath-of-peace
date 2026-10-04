@@ -7,21 +7,22 @@ the root [`README.md`](../../../README.md). GOAL patterns referenced here live i
 
 ## 1. Features
 
-All three ship off. They are switched in [L3 + SELECT] > Mods > `peaceful-haven-city` and can be
+All four ship off. They are switched in [L3 + SELECT] > Mods > `peaceful-haven-city` and can be
 combined freely.
 
 | Toggle | Effect |
 |---|---|
 | Peace in Haven City | Freedom League guards in every district, Metal Head zone included. Citizens in every district except the Metal Head zone. No Krimson Guard robots and no Metal Heads (traffic and flitter spawners). Steps aside while a mission drives the city's factions. |
 | Jak 2 alert system | Jak 2's wanted level: hitting a civilian or attacking a guard starts an alert (levels 0-4), guards then hunt Jak, the city plays its battle music and the minimap pulses red. Every 8 kills raise the level. The alert lasts 30 s after the last offence (faster while Jak hides), then ends once no guard or Hellcat hunts anymore. |
-| Freedom League Hellcats | Three Hellcats piloted by Freedom League guards fly in the city's air traffic (five from alert level 3). With the alert system on they chase and shoot Jak from alert level 2, or when he attacks one. Jak cannot hijack them. |
+| Freedom League Hellcats | Three Hellcats piloted by Freedom League guards fly in the city's air traffic (five from alert level 3). With the alert system on they chase and shoot Jak from alert level 2, or when he attacks one. Jak can steal one like a city car: its pilot is knocked off and turns into a guard on foot, which raises the alert to 2. |
+| Busier streets | Citizen pools 16 male, 16 female, 10 fat (stock 10, 10, 3), so about one citizen in four is a fat citizen. Guard caps x1.7 (11 instead of 7 at alert level 0). Only types the story currently allows get more. |
 
 ## 2. Files
 
 | File | DGO | Role |
 |---|---|---|
-| `goal_src/jak3/pc/features/peaceful-haven-city-menu.gc` | GAME | The three toggles and the Mods menu. Also the data the city code points GAME structures at (the peace borrow alias, the saved stock aliases), so nothing dangles when CWI unloads. |
-| `goal_src/jak3/levels/city/peaceful-haven-city/peaceful-haven-city.gc` | CWI | All gameplay code: peace, the alert port, the `h-hellcat` class and its pilot. Linked right after `ctywide-init.o`. |
+| `goal_src/jak3/pc/features/peaceful-haven-city-menu.gc` | GAME | The four toggles and the Mods menu. Also the data the city code points GAME structures at (the peace borrow alias, the saved stock aliases), so nothing dangles when CWI unloads. |
+| `goal_src/jak3/levels/city/peaceful-haven-city/peaceful-haven-city.gc` | CWI | All gameplay code: peace, the alert port, the `h-hellcat` class and its pilot, the crowd pools. Linked right after `ctywide-init.o`. |
 
 Vanilla touch points, each marked `MOD peaceful-haven-city`:
 
@@ -94,17 +95,40 @@ and `skel-h-hellcat`, but never defines the class nor loads its art (`CTYCARC`).
 - defines `h-hellcat` on `h-car-base`, with the collision Jak 3's own `h-warf` uses on the same
   art, and Jak 2's front turret (joint 4) firing `guard-shot`;
 - spawns a pilot, `mod-peaceful-haven-city-pilot`: a `vehicle-rider` on the Freedom League guard
-  model, in the seated stance (`crimson-guard-car-stance-ja`);
+  model, in the seated stance (`crimson-guard-car-stance-ja`). `crimson-guard-ag` holds every mesh
+  variant at once (blue and dark guard bodies, weapons): the pilot sets the masks a guard on foot
+  sets in `crimson-guard-method-267` (hide bits 1-4, show 3), without a weapon;
 - ships `hellcat-ag` in `CTYPESA`, the guards' borrow level, so pilot and ship always load
   together without a fourth small borrow slot (the borrow manager caps them at 3);
 - registers `vehicle-levels` slot `h-hellcat` to `ctypesa` while that level is loaded
   (`lwide-deactivate` clears it on unload) and sets the `guard-car` pool and caps each frame;
 - ports Jak 2's guard-vehicle pursuit: line of sight through `squad-control-method-17`, pursuit
   through `vehicle-method-104`/`105`, intercept steering through the controller's direct mode,
-  turret bursts with the alert level's Hellcat settings, give-up after 8 s out of sight.
+  turret bursts with the alert level's Hellcat settings, give-up after 8 s out of sight;
+- lets Jak steal it: `*h-hellcat-constants*` uses the city cars' pilot stance and vehicle type, so
+  the stock boarding code works once the `no-hijack` flag is left off. The stock code knocks the
+  pilot off (`target-pilot.gc`); his `vr3` flag turns him into a guard on foot and raises the alert
+  to 2. Entering `player-control` drops the Hellcat's alert and chase, so the alert stops counting
+  it as a hunter. While Jak flies it, the game holds `ctypesa` loaded (`'player-enter-vehicle`
+  sets `borrow-hold-perm` to the type's level).
 
 Without peace, Hellcats only patrol where Freedom League guards may spawn (they share the guards'
 faction slot and art level).
+
+### 3.4 Busier streets
+
+Each pedestrian activation picks the type furthest below its cap (`target-count`, the peace-time
+one), within its pool (`want-count`), which `traffic-manager-method-22` rewrites every frame from the
+faction spawn level (10 male, 10 female, 3 fat by default). Stock code sets the citizens' caps only
+in `restore-default-settings`, to pool - 1 from the pools of that moment: when the traffic starts
+the fat citizen's pool is 1, so its cap is 0 until a later restore brings it to 2. That is why fat
+citizens are rare.
+
+With the toggle on, the mod rewrites pool and cap of the three citizen types each frame after
+method-22 (16/15, 16/15, 10/9), multiplies the guard caps by 1.7 through `guard-target-level` and
+gives guards a pool of cap + 4 (engine cap: 20 per type). A type whose stock pool is 0 (turned off
+by the story or a mission) is left alone. Switching off restores multiplier 1.0 and caps of pool - 1.
+War-mode territories keep their own caps.
 
 ## 4. Rebuild
 
@@ -132,12 +156,17 @@ After switching from another mod, compile with the forced build described in
 | Alert on, wait about 30 s away from guards | Guards stand down, music and minimap return to normal. |
 | Hellcats on | Hellcats with a guard at the controls fly the traffic lanes. Jak cannot board them. |
 | Hellcats and alert on, shoot a Hellcat | It chases Jak and fires its front gun. |
+| Hellcat pilot | Blue guard, no dark guard mesh, no weapon. |
+| Steal a Hellcat (triangle) | Jak flies it; the pilot drops as a guard on foot and the alert reaches 2. |
+| Busier streets on | Noticeably more citizens and guards, about one fat citizen in four. |
 | Die during an alert | Respawn without the alert, Hellcats still spawn. |
 
 ## 6. Known limits
 
 - Jak 2's Dark Jak alert triggers (transforming raised the alert) are not ported.
 - Jak 2's alarm sound effect is not played: the alert uses the battle music only.
+- Jak cannot fire the Hellcat's front gun nor his own gun while flying it (constants flag `#x20`
+  off, unlike the city cars).
 - The global launcher catalog key `peaceful-haven-city` is also the Jak 2 mod's key: on release,
   the catalog keeps one of the two (`sync_global_catalog.py` warns and the newest release wins).
 
@@ -146,3 +175,4 @@ After switching from another mod, compile with the forced build described in
 | Date | Change |
 |---|---|
 | 2026-10-04 | First version: peace, Jak 2 alert system, Freedom League Hellcats. Compiles (forced build, 3508 targets), `hellcat-ag` baked into `ctypesa.fr3`. Played by the user: the three features work. Open: the pilot shows every guard mesh variant at once, and Jak can hang on a Hellcat but not fly it. |
+| 2026-10-04 | Pilot shows a regular blue guard (guard mesh masks). Hellcats can be stolen (no `no-hijack`; alert dropped on boarding). New toggle "Busier streets": bigger citizen and guard pools, about one fat citizen in four. Played by the user: all three work, engine sound fine while Jak flies a Hellcat. |

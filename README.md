@@ -95,9 +95,9 @@ task boot-game
 
 ## Demonstration Video
 
-[![Demonstration Video](https://img.youtube.com/vi/{ipyIuWD_avs}/maxresdefault.jpg)](https://youtu.be/{ipyIuWD_avs})
+[![Demonstration Video](https://img.youtube.com/vi/ipyIuWD_avs/maxresdefault.jpg)](https://youtu.be/ipyIuWD_avs)
 
-**[Watch the demonstration video on YouTube](https://youtu.be/{ipyIuWD_avs})**
+**[Watch the demonstration video on YouTube](https://youtu.be/ipyIuWD_avs)**
 
 > [!NOTE]
 > *Demonstration videos must be hosted externally on YouTube to prevent repository bloating. Replace `{YOUTUBE_ID}` with your YouTube video ID (e.g. `MnqnybexhSA` from `https://youtu.be/MnqnybexhSA`).*

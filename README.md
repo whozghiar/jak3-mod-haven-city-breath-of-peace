@@ -17,9 +17,11 @@ Haven City at peace in Jak 3: Freedom League guards and citizens walk every dist
 - **Repository:** [`whozghiar/jak3-mod-peaceful-haven-city`](https://github.com/whozghiar/jak3-mod-peaceful-haven-city), created from the modding base [`whozghiar/jak-project`](https://github.com/whozghiar/jak-project)
 
 ## Key Features
-- **Feature 1:** Simple description of the first key feature.
-- **Feature 2:** Simple description of the second key feature.
-- **Feature 3:** Simple description of the third key feature.
+Open the Mods menu in game with **L3 + SELECT**, then **peaceful-haven-city**. Every feature starts off and can be switched on or off at any time, alone or together.
+
+- **Peace in Haven City:** Freedom League guards patrol every district, the Metal Head zone included, and citizens walk every district except the Metal Head zone. Krimson Guard robots and Metal Heads no longer appear. Story missions that need enemies still get them.
+- **Jak 2 alert system:** hurt a citizen or attack a guard and the city goes on alert, as in Jak 2: five alert levels, guards hunting you, battle music and a red-pulsing minimap. Keep fighting and the alert climbs; lie low for about 30 seconds and it ends once the guards stand down.
+- **Freedom League Hellcats:** Hellcat gunships flown by Freedom League guards join the city's air traffic in every district. With the alert system on, they chase and shoot you from alert level 2, or as soon as you attack one.
 
 ## Download & Play via OpenGOAL Launcher (Players)
 
@@ -66,8 +68,8 @@ task set-game-jak3
 ```
 
 ### 2. Binary Compilation
-- **Status:** [Not required (GOAL-only mod, standard binaries sufficient) / `task build-release-game` (engine or compiler C++ changed) / `task build-release` + `task extract` (decompiler or decompiler/config changed)]
-- **Details:** [Specify which C++ layer was modified — see `docs/modding/guides/task_scripts_reference.md`, section 3]
+- **Status:** Not required: no C++ change, the standard binaries are enough.
+- **Details:** The mod changes GOAL code and the decompiler configuration only (see step 3).
 ```bash
 # GOAL-only mod: nothing to build — go straight to the REPL below.
 # Engine / compiler C++ changed:
@@ -77,8 +79,8 @@ task build-release-decomp
 ```
 
 ### 3. Asset Extraction
-- **Status:** [Required (`task extract`) / Standard extraction sufficient]
-- **Details:** [Specify if custom 3D models, textures, or sound banks require extraction]
+- **Status:** Required (`task extract`).
+- **Details:** The Hellcat model is baked into the Freedom League guards' level (`ctypesa.fr3`) at extraction.
 ```bash
 task extract
 ```

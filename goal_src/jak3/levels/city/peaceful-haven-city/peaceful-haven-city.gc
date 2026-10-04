@@ -1,0 +1,1065 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: peaceful-haven-city.gc
+;; dgos: CWI
+;;
+;; Peaceful Haven City -- gameplay half of the mod, linked in CWI (ctywide) right after
+;; ctywide-init.o so every city type it touches already exists. Three features, each one driven by a
+;; GAME-resident toggle of peaceful-haven-city-menu.gc and applied from the city's own per-frame
+;; update (ff-squad-control `update`, hooked in ff-squad-control.gc), so nothing runs outside the city:
+;;
+;;   1. Peace: Freedom League guards in every district, citizens everywhere but the Metal Head zone,
+;;      no Krimson Guard robots nor Metal Heads. Missions that drive the city's factions keep stock.
+;;   2. Jak 2's alert system: Jak 2's `update-alert-state` rebuilt on Jak 3's ff-squad-control, with
+;;      Jak 2's five alert levels, 30 s timer, ending phase, kill escalation, guards and Hellcats
+;;      hunting Jak, alert music and the red minimap pulse.
+;;   3. Freedom League Hellcats: the `h-hellcat` class Jak 3 declares but never defines, a Freedom
+;;      League pilot, air-traffic spawning, and Jak 2's guard-vehicle pursuit.
+;;
+;; Technical notes and the change log: docs/modding/current_mod/peaceful-haven-city_readme.md.
+
+;; GAME-resident state, defined in pc/features/peaceful-haven-city-menu.gc.
+(define-extern *mod-peaceful-haven-city-peace* symbol)
+(define-extern *mod-peaceful-haven-city-alert* symbol)
+(define-extern *mod-peaceful-haven-city-hellcats* symbol)
+(define-extern *mod-peaceful-haven-city-peace-active* symbol)
+(define-extern *mod-peaceful-haven-city-peace-alias* pair)
+(define-extern *mod-peaceful-haven-city-city-aliases* (array symbol))
+(define-extern *mod-peaceful-haven-city-saved-aliases* (array object))
+
+;; ================================================================================================
+;; 1. Peace in Haven City
+;; ================================================================================================
+;;
+;; The city decides who may spawn and walk where through cty-faction-manager-method-14: per
+;; territory, strength = faction-array[territory].slot + modifiers set by story commands. Positive
+;; lets a faction spawn there, zero lets it walk through, negative keeps it out. Story commands only
+;; change the modifiers (by +-5 at most); faction-array only ever holds pointers to
+;; *default-faction-info* (restore-defaults). So peace points faction-array at the two entries below
+;; (values far beyond any modifier) and putting the default pointers back is a full restore.
+;; Slot order: ff-guard ff-ped kg-guard kg-ped mh-guard mh-ped.
+
+(define *mod-peaceful-haven-city-peace-territory*
+  (new 'static 'cty-faction-info :ff-guard 60 :ff-ped 60 :kg-guard -60 :kg-ped -60 :mh-guard -60 :mh-ped -60)
+  )
+
+;; Metal Head zone (territories mhcity-mh-ff-border, mhcity-mh, mhcity-mh-deep): guards, no citizens.
+(define *mod-peaceful-haven-city-peace-mh-territory*
+  (new 'static 'cty-faction-info :ff-guard 60 :ff-ped -60 :kg-guard -60 :kg-ped -60 :mh-guard -60 :mh-ped -60)
+  )
+
+;; Number of territories with stock data (port-ff-deep .. mhcity-mh-deep). special0-8 stay stock.
+(defconstant MOD_PEACEFUL_HAVEN_CITY_TERRITORIES 21)
+
+;; #t while the peace tables and aliases are installed (so switching peace off restores them once).
+(define *mod-peaceful-haven-city-peace-applied* #f)
+
+(defun mod-peaceful-haven-city-mission-active? ()
+  "True while a mission drives the city's factions itself: an open task node with faction commands
+   (the port fight, the HQ defence, the tower, ...), a mission's enemy settings, or a faction-command
+   setting. Peace steps aside then, so missions keep the enemies they need."
+  (when (or (-> *setting-control* user-current kg-enemy-settings)
+            (-> *setting-control* user-current mh-enemy-settings)
+            (nonzero? (-> *setting-control* user-current faction-command-count))
+            )
+    (return #t)
+    )
+  (let ((nodes (-> *game-info* sub-task-list)))
+    (dotimes (i (-> nodes length))
+      ;; node 0 is unused; city-start-start only holds '((restore-defaults)), applied by every update
+      (when (and (> i 0) (!= i (game-task-node city-start-start)))
+        (let ((node (-> nodes i)))
+          (if (and (not (null? (-> node faction-commands))) (game-task-node-info-method-12 node))
+              (return #t)
+              )
+          )
+        )
+      )
+    )
+  #f
+  )
+
+(defun mod-peaceful-haven-city-plain-alias? ((alias object))
+  "True when a ctywide-* borrow alias only borrows the stock city art levels. Aliases that borrow a
+   mission level (lctyass, lctyprot, lpatkcs, ...) are left alone: replacing them would unload it."
+  (when (or (not alias) (null? alias))
+    (return #f)
+    )
+  (let ((p alias)
+        (i 0)
+        )
+    (while (not (null? p))
+      (when (zero? (logand i 1))
+        (let ((name (car (the-as pair p))))
+          (when (not (or (= name 'ctywide)
+                         (= name 'dummy)
+                         (= name 'ctypesa)
+                         (= name 'ctypesb)
+                         (= name 'ctypesc)
+                         (= name 'ctypepa)
+                         (= name 'ctypepb)
+                         (= name 'ctypepc)
+                         (= name 'ctycara)
+                         (= name 'ctycarb)
+                         )
+                     )
+            (return #f)
+            )
+          )
+        )
+      (+! i 1)
+      (set! p (cdr (the-as pair p)))
+      )
+    )
+  #t
+  )
+
+(defun mod-peaceful-haven-city-patch-aliases ((on symbol))
+  "Switch every plain ctywide-* alias to the peace borrow list (on = #t), or put the saved lists back
+   (on = #f). The originals are saved in GAME memory, so they survive CWI unloading. Stock tasks reset
+   the aliases on every update-task-masks: the next call simply saves the fresh list and patches again."
+  (let ((changed #f))
+    (dotimes (i (-> *mod-peaceful-haven-city-city-aliases* length))
+      (let ((info (lookup-level-info (-> *mod-peaceful-haven-city-city-aliases* i))))
+        (when (and info (-> info borrow))
+          (let ((cur (-> info borrow alias)))
+            (cond
+              (on
+                (when (and (!= cur *mod-peaceful-haven-city-peace-alias*) (mod-peaceful-haven-city-plain-alias? cur))
+                  (set! (-> *mod-peaceful-haven-city-saved-aliases* i) cur)
+                  (set! (-> info borrow alias) *mod-peaceful-haven-city-peace-alias*)
+                  (set! changed #t)
+                  )
+                )
+              ((= cur *mod-peaceful-haven-city-peace-alias*)
+               (set! (-> info borrow alias) (-> *mod-peaceful-haven-city-saved-aliases* i))
+               (set! changed #t)
+               )
+              )
+            )
+          )
+        )
+      )
+    (if changed
+        (add-borrow-levels *load-state*)
+        )
+    )
+  (none)
+  )
+
+(defun mod-peaceful-haven-city-patch-factions ((mgr cty-faction-manager) (on symbol))
+  "Point the faction table at the peace entries (on = #t) or back at *default-faction-info*, then
+   flush the permission cache and rebuild the territory list (borrowed faction art, war modes)."
+  (when (!= (= (-> mgr faction-array 0) *mod-peaceful-haven-city-peace-territory*) on)
+    (dotimes (i MOD_PEACEFUL_HAVEN_CITY_TERRITORIES)
+      (set! (-> mgr faction-array i)
+            (cond
+              ((not on)
+               (-> *default-faction-info* i)
+               )
+              ((>= i (the-as int (nav-territory-type mhcity-mh-ff-border)))
+               *mod-peaceful-haven-city-peace-mh-territory*
+               )
+              (else
+                *mod-peaceful-haven-city-peace-territory*
+                )
+              )
+            )
+      )
+    (cty-faction-manager-method-19 mgr)
+    (cty-faction-manager-method-22 mgr)
+    )
+  (none)
+  )
+
+(defun mod-peaceful-haven-city-peace-update ()
+  "Per-frame peace driver. Enforces the peace tables while the toggle is on and no mission drives the
+   city, removes the enemies already out on the first frame, and restores stock state once otherwise."
+  (let ((mgr *cty-faction-manager*)
+        (want (and *mod-peaceful-haven-city-peace* (not (mod-peaceful-haven-city-mission-active?))))
+        )
+    (set! *mod-peaceful-haven-city-peace-active* want)
+    (when mgr
+      (cond
+        (want
+          (when (not *mod-peaceful-haven-city-peace-applied*)
+            (set! *mod-peaceful-haven-city-peace-applied* #t)
+            ;; robots and Metal Heads already out: no new ones can activate once the tables are in
+            (send-event *traffic-manager* 'deactivate-by-type (traffic-type metalhead-grunt))
+            (send-event *traffic-manager* 'deactivate-by-type (traffic-type metalhead-flitter))
+            (send-event *traffic-manager* 'deactivate-by-type (traffic-type metalhead-predator))
+            (send-event *traffic-manager* 'deactivate-by-type (traffic-type roboguard))
+            (send-event *traffic-manager* 'deactivate-by-type (traffic-type spydroid))
+            (send-event *traffic-manager* 'deactivate-by-type (traffic-type flying-turret))
+            )
+          (mod-peaceful-haven-city-patch-factions mgr #t)
+          (mod-peaceful-haven-city-patch-aliases #t)
+          )
+        (*mod-peaceful-haven-city-peace-applied*
+          (set! *mod-peaceful-haven-city-peace-applied* #f)
+          (mod-peaceful-haven-city-patch-factions mgr #f)
+          (mod-peaceful-haven-city-patch-aliases #f)
+          )
+        )
+      )
+    )
+  (none)
+  )
+
+;; ================================================================================================
+;; 2. Jak 2 alert system
+;; ================================================================================================
+;;
+;; Jak 3 still carries Jak 2's alert state machine (ff-squad-control-method-45, a near copy of Jak 2's
+;; traffic-engine update-alert-state) and still raises it when Jak hits civilians, but guards ignore
+;; it, its music and minimap pulse are gone, its settings table has one level out of five (levels 1+
+;; read past it) and its guard count returns nothing, so an alert never ends. While the toggle is on,
+;; ff-squad-control `update` runs mod-peaceful-haven-city-alert-update in its place.
+
+;; Jak 2's five *alert-level-settings*, in Jak 3's squad-alert-state-settings layout (slots: 0 tazer,
+;; 1 rifle, 2 grenade, 3 waster, 4 bike turret, 5 Hellcat turret). Level 0 is Jak 3's stock level 0
+;; (3 tazers, 3 rifles, 1 grenadier). Levels 1-4 scale Jak 2's guard counts by Jak 3's denser stock
+;; patrol (7 guards for Jak 2's 5) and keep Jak 2's aim, delay and burst values.
+(define *mod-peaceful-haven-city-alert-settings*
+  (new 'static 'inline-array squad-alert-state-settings 5
+    ;; level 0: no alert (Jak 3 stock)
+    (new 'static 'squad-alert-state-settings
+      :ped-tazer (new 'static 'squad-unit-settings :target-count 3 :shot-count 1 :inaccuracy 0.5
+                   :acquire-delay (seconds 1) :shot-delay (seconds 0.25) :burst-delay (seconds 2))
+      :ped-rifle (new 'static 'squad-unit-settings :target-count 3 :shot-count 2 :rand-shot-count 1 :inaccuracy 0.5
+                   :acquire-delay (seconds 1) :shot-delay (seconds 0.25) :burst-delay (seconds 2))
+      :ped-grenade (new 'static 'squad-unit-settings :target-count 1 :shot-count 1 :inaccuracy 0.5
+                     :acquire-delay (seconds 1) :shot-delay (seconds 0.25) :burst-delay (seconds 2))
+      :bike-turret (new 'static 'squad-unit-settings :shot-count 2 :rand-shot-count 1 :inaccuracy 0.5
+                     :acquire-delay (seconds 1) :shot-delay (seconds 0.25) :burst-delay (seconds 5))
+      :hellcat-turret (new 'static 'squad-unit-settings :shot-count 2 :rand-shot-count 1 :inaccuracy 0.5
+                        :acquire-delay (seconds 1) :shot-delay (seconds 0.25) :burst-delay (seconds 5))
+      )
+    ;; level 1: Jak 2 sends tazers only (arrest)
+    (new 'static 'squad-alert-state-settings
+      :ped-tazer (new 'static 'squad-unit-settings :target-count 7 :shot-count 1 :inaccuracy 0.5
+                   :acquire-delay (seconds 1) :shot-delay (seconds 0.25) :burst-delay (seconds 2))
+      :ped-rifle (new 'static 'squad-unit-settings :shot-count 2 :rand-shot-count 1 :inaccuracy 0.5
+                   :acquire-delay (seconds 1) :shot-delay (seconds 0.25) :burst-delay (seconds 2))
+      :ped-grenade (new 'static 'squad-unit-settings :shot-count 1 :inaccuracy 0.5
+                     :acquire-delay (seconds 1) :shot-delay (seconds 0.25) :burst-delay (seconds 2))
+      :bike-turret (new 'static 'squad-unit-settings :shot-count 2 :rand-shot-count 1 :inaccuracy 0.5
+                     :acquire-delay (seconds 1) :shot-delay (seconds 0.25) :burst-delay (seconds 5))
+      :hellcat-turret (new 'static 'squad-unit-settings :shot-count 2 :rand-shot-count 1 :inaccuracy 0.5
+                        :acquire-delay (seconds 1) :shot-delay (seconds 0.25) :burst-delay (seconds 5))
+      )
+    ;; level 2: rifles join (Jak 2: 3 tazers, 4 rifles)
+    (new 'static 'squad-alert-state-settings
+      :ped-tazer (new 'static 'squad-unit-settings :target-count 4 :shot-count 1 :inaccuracy 0.5
+                   :acquire-delay (seconds 1) :shot-delay (seconds 0.25) :burst-delay (seconds 2))
+      :ped-rifle (new 'static 'squad-unit-settings :target-count 6 :shot-count 2 :rand-shot-count 1 :inaccuracy 0.5
+                   :acquire-delay (seconds 1) :shot-delay (seconds 0.25) :burst-delay (seconds 2))
+      :ped-grenade (new 'static 'squad-unit-settings :shot-count 1 :inaccuracy 0.5
+                     :acquire-delay (seconds 1) :shot-delay (seconds 0.25) :burst-delay (seconds 2))
+      :bike-turret (new 'static 'squad-unit-settings :shot-count 2 :rand-shot-count 1 :inaccuracy 0.5
+                     :acquire-delay (seconds 1) :shot-delay (seconds 0.25) :burst-delay (seconds 5))
+      :hellcat-turret (new 'static 'squad-unit-settings :shot-count 2 :rand-shot-count 1 :inaccuracy 0.5
+                        :acquire-delay (seconds 1) :shot-delay (seconds 0.25) :burst-delay (seconds 5))
+      )
+    ;; level 3: mostly rifles, better aim, faster vehicle bursts (Jak 2: 2 tazers, 7 rifles)
+    (new 'static 'squad-alert-state-settings
+      :ped-tazer (new 'static 'squad-unit-settings :target-count 3 :shot-count 1 :inaccuracy 0.5
+                   :acquire-delay (seconds 1) :shot-delay (seconds 0.25) :burst-delay (seconds 2))
+      :ped-rifle (new 'static 'squad-unit-settings :target-count 10 :shot-count 2 :rand-shot-count 1 :inaccuracy 0.25
+                   :acquire-delay (seconds 1) :shot-delay (seconds 0.25) :burst-delay (seconds 2))
+      :ped-grenade (new 'static 'squad-unit-settings :shot-count 1 :inaccuracy 0.5
+                     :acquire-delay (seconds 1) :shot-delay (seconds 0.25) :burst-delay (seconds 2))
+      :bike-turret (new 'static 'squad-unit-settings :shot-count 2 :rand-shot-count 1 :inaccuracy 0.25
+                     :acquire-delay (seconds 0.75) :shot-delay (seconds 0.25) :burst-delay (seconds 4))
+      :hellcat-turret (new 'static 'squad-unit-settings :shot-count 2 :rand-shot-count 1 :inaccuracy 0.25
+                        :acquire-delay (seconds 0.75) :shot-delay (seconds 0.25) :burst-delay (seconds 4))
+      )
+    ;; level 4: same squad, sharpest aim and fastest fire
+    (new 'static 'squad-alert-state-settings
+      :ped-tazer (new 'static 'squad-unit-settings :target-count 3 :shot-count 1 :inaccuracy 0.125
+                   :acquire-delay (seconds 0.5) :shot-delay (seconds 0.25) :burst-delay (seconds 2))
+      :ped-rifle (new 'static 'squad-unit-settings :target-count 10 :shot-count 2 :rand-shot-count 2 :inaccuracy 0.125
+                   :acquire-delay (seconds 0.5) :shot-delay (seconds 0.15) :burst-delay (seconds 2))
+      :ped-grenade (new 'static 'squad-unit-settings :shot-count 1 :inaccuracy 0.125
+                     :acquire-delay (seconds 0.5) :shot-delay (seconds 0.25) :burst-delay (seconds 2))
+      :bike-turret (new 'static 'squad-unit-settings :shot-count 2 :rand-shot-count 2 :inaccuracy 0.125
+                     :acquire-delay (seconds 0.5) :shot-delay (seconds 0.25) :burst-delay (seconds 3))
+      :hellcat-turret (new 'static 'squad-unit-settings :shot-count 2 :rand-shot-count 2 :inaccuracy 0.125
+                        :acquire-delay (seconds 0.5) :shot-delay (seconds 0.25) :burst-delay (seconds 3))
+      )
+    )
+  )
+
+;; Traffic types whose deaths escalate the alert (Jak 2: every 8 kills while alerted raise it by one).
+;; Jak 2's city held only civilians and guards in peace time; Jak 3's war zones also lose Metal Heads
+;; and robots to the guards, which must not count. Bits: civilians 0-3, guard-pilot 4, guard-a 6,
+;; guard-b 7, civilian vehicles 17-22, guard vehicles 24-26.
+(define *mod-peaceful-haven-city-escalation-types* #x77e00df)
+
+;; Last state of the alert toggle seen by the city code (edges reset the alert, see below).
+(define *mod-peaceful-haven-city-alert-was-on* #f)
+
+(defun mod-peaceful-haven-city-hostile-count ((this ff-squad-control))
+  "Guards and Hellcats still hunting the target. The ending phase lasts until this is 0 (Jak 2 waited
+   for every guard to be gone; Jak 3's denser patrols would keep an alert alive forever, so only the
+   hunters count, and they stand down when the ending starts)."
+  (let ((n 0))
+    (let ((trk (-> this traffic tracker1)))
+      (dotimes (i (the-as int (-> trk active-object-count)))
+        (when (= (-> trk active-object-type-list i) (traffic-type guard-a))
+          (let ((g (the-as crimson-guard (handle->process (-> trk active-object-list i)))))
+            (if (and g
+                     (not (focus-test? g dead inactive))
+                     (logtest? (-> g flags) (citizen-flag in-pursuit hostile))
+                     )
+                (+! n 1)
+                )
+            )
+          )
+        )
+      )
+    (let ((trk (-> this traffic tracker0)))
+      (dotimes (i (the-as int (-> trk active-object-count)))
+        (when (= (-> trk active-object-type-list i) (traffic-type guard-car))
+          (let ((v (the-as vehicle (handle->process (-> trk active-object-list i)))))
+            (if (and v (not (focus-test? v dead inactive)) (logtest? (vehicle-flag alert) (-> v v-flags)))
+                (+! n 1)
+                )
+            )
+          )
+        )
+      )
+    n
+    )
+  )
+
+(defun mod-peaceful-haven-city-alert-notify ((this ff-squad-control) (hunt symbol))
+  "Jak 2 send-alert-events. hunt = #t: every guard turns on the target (the same hatred switch Jak 3
+   uses when a guard is attacked, 'member-attacked) and every Hellcat gets 'alert-begin. hunt = #f:
+   guards drop that hatred and their pursuit, Hellcats get 'alert-end. War-mode guards are skipped."
+  (let ((tgt (get-target-focus this)))
+    (let ((trk (-> this traffic tracker1)))
+      (dotimes (i (the-as int (-> trk active-object-count)))
+        (when (= (-> trk active-object-type-list i) (traffic-type guard-a))
+          (let ((g (the-as crimson-guard (handle->process (-> trk active-object-list i)))))
+            (when (and g (!= (-> g faction-mode) 1) (not (focus-test? g dead inactive)))
+              (cond
+                (hunt
+                  (send-event g 'member-attacked)
+                  )
+                (else
+                  (if (-> g attacker-info)
+                      (set! (-> g attacker-info hatred-map-callback) #f)
+                      )
+                  (send-event g 'end-pursuit)
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    (let ((trk (-> this traffic tracker0)))
+      (dotimes (i (the-as int (-> trk active-object-count)))
+        (when (= (-> trk active-object-type-list i) (traffic-type guard-car))
+          (let ((v (handle->process (-> trk active-object-list i))))
+            (if v
+                (send-event v (if hunt 'alert-begin 'alert-end) tgt)
+                )
+            )
+          )
+        )
+      )
+    )
+  (none)
+  )
+
+(defun mod-peaceful-haven-city-alarm-off ((this ff-squad-control))
+  "Undo everything a running alert shows: minimap pulse, fight music, hunting guards and Hellcats."
+  (when (logtest? (-> this alert-state flags) (squad-alert-flag alarm-on))
+    (logclear! (-> this alert-state flags) (squad-alert-flag alarm-on))
+    (set! (-> *game-info* wanted-flash) #f)
+    ;; same key and value Jak 3 uses to end its own fight music (cty-faction, ctywide-deactivate)
+    (persist-with-delay *setting-control* 'cty-faction-music 0 'music 'city1 0.0 0)
+    (mod-peaceful-haven-city-alert-notify this #f)
+    (logclear!
+      (-> this alert-state target-status-array 0 flags)
+      (squad-target-flag visible-now visible-recently visible-ever)
+      )
+    (dotimes (i 29)
+      (set! (-> this traffic object-type-info-array i killed-count) (the-as uint 0))
+      )
+    )
+  (none)
+  )
+
+(defun mod-peaceful-haven-city-alert-update ((this ff-squad-control))
+  "Replaces ff-squad-control-method-45 while the alert toggle is on (hook in ff-squad-control `update`).
+   Passes 1-2 are method-45's (raw offsets kept as decompiled) with the settings taken from Jak 2's
+   five-level table; pass 3 is Jak 2's update-alert-state: 30 s timer refreshed by every offence,
+   drained faster while Jak hides, then an ending phase that blocks new guards until no guard or
+   Hellcat hunts anymore, then back to level 0 after 3 s. While alerted: every 8 kills raise the
+   level, guards and Hellcats hunt the target, the fight music plays and the minimap pulses red."
+  (let ((s5-0 (get-target-focus this)))
+    ;; pass 1: unit settings of the current level, per guard type, for the three faction modes
+    (mem-copy!
+      (the-as pointer (-> this settings))
+      (the-as pointer (-> *mod-peaceful-haven-city-alert-settings* (min 4 (the-as int (-> this alert-state level)))))
+      320
+      )
+    (mem-copy! (the-as pointer (-> this settings-war)) (the-as pointer *ff-war-alert-state-settings*) 320)
+    (dotimes (v1-2 3)
+      (dotimes (a0-4 10)
+        (when (logtest? *ff-guard-type-mask* (ash 1 a0-4))
+          (let ((a2-7 (the-as squad-alert-state-settings (+ (+ (* a0-4 32) 820 (* 320 v1-2)) (the-as int this))))
+                (a1-13 (the-as traffic-guard-type-array (+ (+ (* v1-2 16) 1780 (* 48 a0-4)) (the-as int this))))
+                )
+            (set! (-> a2-7 ped-tazer inaccuracy)
+                  (fmax 0.0 (fmin 1.0 (* (-> a2-7 ped-tazer inaccuracy) (-> this alert-state guard-inaccuracy-factor))))
+                  )
+            ;; Jak piloting: shorter acquire, shot and burst delays (Jak 2 and Jak 3 alike)
+            (when (and s5-0 (= (-> s5-0 type) target) (focus-test? *target* pilot))
+              (set! (-> a2-7 ped-tazer acquire-delay)
+                    (the-as uint (the int (* 0.75 (the float (-> a2-7 ped-tazer acquire-delay)))))
+                    )
+              (set! (-> a2-7 ped-tazer shot-delay) (the-as uint (the int (* 0.6 (the float (-> a2-7 ped-tazer shot-delay))))))
+              (set! (-> a2-7 ped-tazer burst-delay)
+                    (the-as uint (the int (* 0.8 (the float (-> a2-7 ped-tazer burst-delay)))))
+                    )
+              )
+            (set! (-> a1-13 guard-info-normal target-count)
+                  (max
+                    (min
+                      (the int (* (the float (-> a2-7 ped-tazer target-count)) (-> this alert-state guard-target-level)))
+                      (-> a1-13 guard-info-normal max-target-count)
+                      )
+                    (-> a1-13 guard-info-normal min-target-count)
+                    )
+                  )
+            )
+          )
+        )
+      )
+    )
+  ;; pass 2: per traffic type, the sum of its guard types' target counts
+  (dotimes (v1-5 3)
+    (dotimes (a0-7 29)
+      (let ((a2-12 (-> this guard-type-mask-from-object-type a0-7)))
+        (when (nonzero? a2-12)
+          (let ((a3-20 0)
+                (a1-17 0)
+                )
+            (while (nonzero? a2-12)
+              (if (logtest? a2-12 1)
+                  (+! a1-17 (-> (the-as ff-squad-control (+ (the-as uint this) (* 48 a3-20) (* v1-5 16)))
+                                guard-type-info-array
+                                0
+                                guard-info-normal
+                                target-count
+                                )
+                      )
+                  )
+              (+! a3-20 1)
+              (set! a2-12 (shr a2-12 1))
+              )
+            (set! (-> this traffic object-type-info-array 0 target-counts (+ v1-5 (* a0-7 32))) a1-17)
+            )
+          )
+        )
+      )
+    )
+  ;; pass 3: Jak 2's alert state machine
+  (let ((alerted #f))
+    (when (not (logtest? (-> this alert-state flags) (squad-alert-flag war)))
+      (when *traffic-alert-level-force*
+        (set! (-> this alert-state level) (the-as uint 3))
+        (logclear! (-> this alert-state flags) (squad-alert-flag alert-ending))
+        (set-time! (-> this alert-state start-time))
+        )
+      (when (>= (-> this alert-state level) (the-as uint 1))
+        (set! alerted #t)
+        (cond
+          ((logtest? (-> this alert-state flags) (squad-alert-flag alert-ending))
+           (cond
+             ((> (mod-peaceful-haven-city-hostile-count this) 0)
+              (set-time! (-> this alert-state start-time))
+              )
+             ((time-elapsed? (-> this alert-state start-time) (seconds 3))
+              (set! alerted #f)
+              (set! (-> this alert-state level) (the-as uint 0))
+              (logclear! (-> this alert-state flags) (squad-alert-flag alert-ending))
+              )
+             )
+           )
+          (else
+            (let ((left (+ (- (-> this alert-state start-time) (current-time)) (the-as time-frame (-> this alert-state duration)))))
+              ;; hiding drains the remaining time twice as fast
+              (if (and (get-target-focus this)
+                       (= (-> (get-target-focus this) type) target)
+                       (-> *target* next-state)
+                       (= (-> *target* next-state name) 'target-hide)
+                       )
+                  (set! left (- left (the-as time-frame (* (- (current-time) (-> *target* state-time)) 2))))
+                  )
+              (if (<= left 0)
+                  (logior! (-> this alert-state flags) (squad-alert-flag alert-ending))
+                  )
+              )
+            )
+          )
+        )
+      )
+    (cond
+      (alerted
+        (logior! (-> this alert-state flags) (squad-alert-flag alarm-on))
+        (set! (-> *game-info* wanted-flash) #t)
+        ;; Jak 2 switched city music to its battle mode; Jak 3's city battle track is fight1. Written
+        ;; every frame on the faction manager's own key, after it ran, so it never flips back mid-alert.
+        (persist-with-delay *setting-control* 'cty-faction-music (seconds 0.5) 'music 'fight1 0.0 0)
+        (cond
+          ((logtest? (-> this alert-state flags) (squad-alert-flag alert-ending))
+           ;; Jak 2: no new guards while the alert ends, and the hunters stand down
+           (dotimes (m 3)
+             (set! (-> this traffic object-type-info-array (traffic-type guard-a) target-counts m) 0)
+             (set! (-> this traffic object-type-info-array (traffic-type guard-car) target-counts m) 0)
+             )
+           (mod-peaceful-haven-city-alert-notify this #f)
+           )
+          (else
+            (mod-peaceful-haven-city-alert-notify this #t)
+            )
+          )
+        ;; Jak 2 escalation: every 8 kills since the alert began raise it by one level
+        (let ((kills 0))
+          (dotimes (i 29)
+            (if (logtest? *mod-peaceful-haven-city-escalation-types* (ash 1 i))
+                (+! kills (-> this traffic object-type-info-array i killed-count))
+                )
+            )
+          (if (and (>= kills (the-as int (* (-> this alert-state level) 8)))
+                   (< (-> this alert-state level) (-> this alert-state max-level))
+                   )
+              (start-alert this (the-as int (+ (-> this alert-state level) 1)))
+              )
+          )
+        )
+      (else
+        (mod-peaceful-haven-city-alarm-off this)
+        )
+      )
+    )
+  (none)
+  )
+
+(defun mod-peaceful-haven-city-alert-counts ((this ff-squad-control))
+  "Alert bookkeeping after the stock update: start and stop from a clean state when the toggle flips
+   (Jak 3 raises the alert silently on civilian hits, which must not become an instant alert), and
+   give the alerted squad a guard pool big enough for its target count (cap: 20 per traffic type)."
+  (when (!= *mod-peaceful-haven-city-alert* *mod-peaceful-haven-city-alert-was-on*)
+    (set! *mod-peaceful-haven-city-alert-was-on* *mod-peaceful-haven-city-alert*)
+    (mod-peaceful-haven-city-alarm-off this)
+    (set! (-> this alert-state level) (the-as uint 0))
+    (logclear! (-> this alert-state flags) (squad-alert-flag alert-ending))
+    )
+  (when (and *mod-peaceful-haven-city-alert*
+             (> (-> this alert-state level) 0)
+             (not (logtest? (-> this alert-state flags) (squad-alert-flag alert-ending war)))
+             )
+    (let ((ti (-> this traffic object-type-info-array (traffic-type guard-a))))
+      (set! (-> ti want-count) (min 20 (+ (-> ti target-count) 4)))
+      )
+    )
+  (none)
+  )
+
+;; ================================================================================================
+;; 3. Freedom League Hellcats
+;; ================================================================================================
+;;
+;; Jak 3 declares h-hellcat (vehicle-manager.gc), maps vehicle-type h-hellcat to traffic-type
+;; guard-car and ships *h-hellcat-constants* and skel-h-hellcat (car.gc), but never defines the class
+;; and never loads its art (CTYCARC). The mod defines it here, ships hellcat-ag inside CTYPESA (the
+;; Freedom League guards' borrow level, ctypesa.gd + decompiler extra_art_groups_by_dgo) so pilot and
+;; ship always load together, and spawns it as guard-car traffic (traffic-object-spawn case).
+
+;; ---------------------------------------------------------------------------------------------
+;; Pilot: a Freedom League guard seated in the Hellcat (Jak 2's crimson-guard-rider)
+;; ---------------------------------------------------------------------------------------------
+
+(deftype mod-peaceful-haven-city-pilot (vehicle-rider)
+  ()
+  )
+
+;; The guard's own model and animations (crimson-guard-ag, shipped in CTYPESA).
+(defskelgroup skel-mod-peaceful-haven-city-pilot crimson-guard crimson-guard-lod0-jg crimson-guard-idle-ja
+              ((crimson-guard-lod0-mg (meters 20)) (crimson-guard-lod2-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 3)
+              :origin-joint-index 3
+              )
+
+(defmethod initialize-collision ((this mod-peaceful-haven-city-pilot))
+  "Stock rider setup, then bind the pilot to its Hellcat's level: the guard art lives in CTYPESA, not
+   in ctywide where riders normally look (ctywide-entity-hack)."
+  (call-parent-method this)
+  (let ((ship (ppointer->process (-> this parent))))
+    (if ship
+        (set! (-> this level) (-> ship level))
+        )
+    )
+  (none)
+  )
+
+(defmethod setup ((this mod-peaceful-haven-city-pilot))
+  "Seat the pilot and play the guard's seated stance (crimson-guard-car-stance-ja)."
+  (call-parent-method this)
+  (set! (-> this riding-anim) 36)
+  0
+  (none)
+  )
+
+(defmethod setup-lods ((this mod-peaceful-haven-city-pilot))
+  "Load the guard skeleton. vr3 marks a guard rider: if he is ever knocked off, stock code turns him
+   into a guard on foot and raises the alert to 2."
+  (initialize-skeleton
+    this
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-mod-peaceful-haven-city-pilot" (the-as (pointer level) #f)))
+    (the-as pair 0)
+    )
+  (logior! (-> this flags) (vehicle-rider-flag vr0 vr3))
+  (set! (-> this draw lod-set lod 0 dist) 122880.0)
+  (set! (-> this draw lod-set lod 1 dist) 286720.0)
+  ;; pilot seat and a random sway phase, as the base vehicle-rider setup-lods does
+  (set! (-> this seat-index) 0)
+  (set! (-> this anim-t) (* 65536.0 (rand-vu)))
+  (setup this)
+  0
+  (none)
+  )
+
+;; ---------------------------------------------------------------------------------------------
+;; The Hellcat
+;; ---------------------------------------------------------------------------------------------
+
+;; Jak 2's *hellcat-front-turret-control-info* (front gun, joint 4 "frontgun"), with the fields Jak 3
+;; added: guard-shot rounds, 1 hit point each.
+(define *mod-peaceful-haven-city-hellcat-turret*
+  (new 'static 'turret-control-info
+    :joint-index 4
+    :barrel-count 1
+    :shot-speed 819200.0
+    :attack-range 286720.0
+    :damage 1.0
+    :vehicle-damage-factor 1.0
+    :vehicle-impulse-factor 1.0
+    :rot-min (new 'static 'array float 2 -16384.0 -21845.334)
+    :rot-max (new 'static 'array float 2 0.0 21845.334)
+    :local-pos (new 'static 'vector :y -1433.6 :z 4096.0 :w 1.0)
+    :local-dir (new 'static 'vector :z 1.0 :w 1.0)
+    :barrel-array (new 'static 'inline-array turret-barrel-info 4
+      (new 'static 'turret-barrel-info
+        :local-pos (new 'static 'vector :y -1433.6 :z 4096.0 :w 1.0)
+        :local-dir (new 'static 'vector :z 1.0 :w 1.0)
+        )
+      (new 'static 'turret-barrel-info)
+      (new 'static 'turret-barrel-info)
+      (new 'static 'turret-barrel-info)
+      )
+    )
+  )
+
+(set! (-> *mod-peaceful-haven-city-hellcat-turret* shot-type) guard-shot)
+
+;; Turret fire settings used when no Freedom League squad is up (normally the live Hellcat slot of
+;; *ff-squad-control*, which the alert updates per level).
+(define *mod-peaceful-haven-city-hellcat-fire*
+  (new 'static 'squad-unit-settings :shot-count 2 :rand-shot-count 1 :inaccuracy 0.5
+    :acquire-delay (seconds 1) :shot-delay (seconds 0.25) :burst-delay (seconds 5))
+  )
+
+(deftype h-hellcat (h-car-base)
+  ((turret-jm             joint-mod-rotate-local  :inline)
+   (turret                turret-control          :inline)
+   (target-status         squad-target-status     :inline)
+   (pursuit-target        handle)
+   (target-in-sight-time  time-frame)
+   )
+  (:state-methods
+    hostile
+    )
+  )
+
+
+(defmethod init-collision! ((this h-hellcat))
+  "Jak 2's hellcat collision, as Jak 3's own h-warf (same art) uses it."
+  (let ((s5-0 (new 'process 'collide-shape-moving this (collide-list-enum usually-hit-by-player))))
+    (set! (-> s5-0 dynam) (copy *standard-dynamics* 'process))
+    (set! (-> s5-0 reaction) cshape-reaction-default)
+    (set! (-> s5-0 no-reaction)
+          (the-as (function collide-shape-moving collide-query vector vector object) nothing)
+          )
+    (set! (-> s5-0 penetrate-using) (penetrate vehicle))
+    (let ((s4-0 (new 'process 'collide-shape-prim-group s5-0 (the-as uint 7) 0)))
+      (set! (-> s5-0 total-prims) (the-as uint 8))
+      (set! (-> s4-0 prim-core action) (collide-action solid rideable))
+      (set-vector! (-> s4-0 local-sphere) 0.0 0.0 0.0 26624.0)
+      (set! (-> s5-0 root-prim) s4-0)
+      )
+    (let ((v1-11 (new 'process 'collide-shape-prim-sphere s5-0 (the-as uint 1))))
+      (set! (-> v1-11 prim-core action) (collide-action solid))
+      (set! (-> v1-11 transform-index) 0)
+      (set-vector! (-> v1-11 local-sphere) 4096.0 1228.8 9011.2 6144.0)
+      )
+    (let ((v1-13 (new 'process 'collide-shape-prim-sphere s5-0 (the-as uint 4))))
+      (set! (-> v1-13 prim-core action) (collide-action solid))
+      (set! (-> v1-13 transform-index) 0)
+      (set-vector! (-> v1-13 local-sphere) -4096.0 1228.8 9011.2 6144.0)
+      )
+    (let ((v1-15 (new 'process 'collide-shape-prim-sphere s5-0 (the-as uint 0))))
+      (set! (-> v1-15 prim-core action) (collide-action solid nav-sphere))
+      (set! (-> v1-15 transform-index) 0)
+      (set-vector! (-> v1-15 local-sphere) 0.0 2048.0 -409.6 6144.0)
+      (set! (-> v1-15 nav-radius) 24576.0)
+      )
+    (let ((v1-17 (new 'process 'collide-shape-prim-sphere s5-0 (the-as uint 10))))
+      (set! (-> v1-17 prim-core action) (collide-action solid))
+      (set! (-> v1-17 transform-index) 0)
+      (set-vector! (-> v1-17 local-sphere) 0.0 4096.0 -10240.0 8192.0)
+      )
+    (let ((v1-19 (new 'process 'collide-shape-prim-sphere s5-0 (the-as uint 2))))
+      (set! (-> v1-19 prim-core action) (collide-action solid))
+      (set! (-> v1-19 transform-index) 0)
+      (set-vector! (-> v1-19 local-sphere) 10240.0 2048.0 -8192.0 6144.0)
+      )
+    (let ((v1-21 (new 'process 'collide-shape-prim-sphere s5-0 (the-as uint 8))))
+      (set! (-> v1-21 prim-core action) (collide-action solid))
+      (set! (-> v1-21 transform-index) 0)
+      (set-vector! (-> v1-21 local-sphere) -10240.0 2048.0 -8192.0 6144.0)
+      )
+    (let ((v1-23 (new 'process 'collide-shape-prim-mesh s5-0 (the-as uint 0) (the-as uint 0))))
+      (set! (-> v1-23 prim-core action) (collide-action solid rideable))
+      (set! (-> v1-23 transform-index) 3)
+      (set-vector! (-> v1-23 local-sphere) 0.0 0.0 0.0 26624.0)
+      )
+    (set! (-> s5-0 nav-radius) 20480.0)
+    (let ((v1-25 (-> s5-0 root-prim)))
+      (set! (-> s5-0 backup-collide-as) (-> v1-25 prim-core collide-as))
+      (set! (-> s5-0 backup-collide-with) (-> v1-25 prim-core collide-with))
+      )
+    (set! (-> s5-0 nav-flags) (nav-flags has-child-spheres))
+    (set! (-> this root) s5-0)
+    )
+  0
+  (none)
+  )
+
+(defmethod init-rbody-control! ((this h-hellcat))
+  "Skeleton (from CTYPESA through the vehicle's level), Jak 3's stock Hellcat physics, the front
+   turret, and the Freedom League marks: a guard (never targeted by guards) that Jak cannot hijack."
+  (initialize-skeleton
+    this
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-h-hellcat" (the-as (pointer level) #f)))
+    (the-as pair 0)
+    )
+  (alloc-rbody-control! this *h-hellcat-constants*)
+  ;; rider hands follow the hull (joint 3 "main"): the Hellcat has no steering wheel joints
+  (set! (-> this rider-hand-joint-array 0) 3)
+  (set! (-> this rider-hand-joint-array 1) 3)
+  (init (-> this turret-jm) this (the-as uint 4) (joint-mod-base-flags attached))
+  (set-info (-> this turret) *mod-peaceful-haven-city-hellcat-turret*)
+  (set! (-> this turret ignore-handle) (process->handle this))
+  (set! (-> this turret guard-settings) (if *ff-squad-control*
+                                            (get-unit-settings-by-idx *ff-squad-control* 5)
+                                            *mod-peaceful-haven-city-hellcat-fire*
+                                            )
+        )
+  (set! (-> this pursuit-target) (the-as handle #f))
+  (set! (-> this target-status handle) (the-as handle #f))
+  (logior! (-> this mask) (process-mask guard))
+  (logior! (-> this v-flags) (vehicle-flag no-hijack))
+  0
+  (none)
+  )
+
+(defmethod vehicle-method-79 ((this h-hellcat))
+  "Joint mods: point the front gun where the turret aims."
+  (update-joint-mod (-> this turret) (-> this turret-jm))
+  0
+  (none)
+  )
+
+(defmethod vehicle-method-133 ((this h-hellcat) (arg0 traffic-object-spawn-params))
+  "Rider spawn: a Freedom League pilot instead of a civilian."
+  (vehicle-rider-spawn this mod-peaceful-haven-city-pilot arg0)
+  0
+  (none)
+  )
+
+(defun mod-peaceful-haven-city-hellcat-engage ((this h-hellcat) (tgt process))
+  "Mark the Hellcat alerted against tgt. The pursuit itself starts once the target is in sight."
+  (logior! (-> this v-flags) (vehicle-flag alert))
+  (set! (-> this pursuit-target) (process->handle tgt))
+  (set! (-> this target-status handle) (-> this pursuit-target))
+  (none)
+  )
+
+(defun mod-peaceful-haven-city-hellcat-stand-down ((this h-hellcat))
+  "Jak 2 'alert-end / 'end-pursuit: drop the alert and the pursuit, rejoin the traffic lanes."
+  (logclear! (-> this v-flags) (vehicle-flag persistent alert in-pursuit))
+  (set! (-> this pursuit-target) (the-as handle #f))
+  (vehicle-method-105 this)
+  (go (method-of-object this active))
+  (none)
+  )
+
+(defun mod-peaceful-haven-city-hellcat-sight ((this h-hellcat))
+  "Jak 2 vehicle-guard-method-150 on Jak 3's squad: refresh line of sight to the pursuit target
+   (squad-control-method-17, staggered by traffic id), begin the pursuit on first sight, end it when
+   the target is gone."
+  (cond
+    ((handle->process (-> this pursuit-target))
+     (let ((st (squad-control-method-17 (-> this squad) (-> this root trans) (-> this traffic-priority-id) (-> this target-status))))
+       (when (logtest? (-> st flags) (squad-target-flag updated))
+         (logclear! (-> this v-flags) (vehicle-flag target-in-sight))
+         (when (logtest? (-> st flags) (squad-target-flag visible-now))
+           (logior! (-> this v-flags) (vehicle-flag target-in-sight))
+           (set-time! (-> this target-in-sight-time))
+           )
+         )
+       )
+     (if (and (not (logtest? (vehicle-flag in-pursuit) (-> this v-flags)))
+              (logtest? (vehicle-flag target-in-sight) (-> this v-flags))
+              )
+         (vehicle-method-104 this)
+         )
+     )
+    ((logtest? (vehicle-flag in-pursuit) (-> this v-flags))
+     ;; target gone: end the pursuit once (vehicle-method-105 re-paths onto the lanes)
+     (vehicle-method-105 this)
+     )
+    )
+  (none)
+  )
+
+(defun mod-peaceful-haven-city-hellcat-steer ((this h-hellcat) (tgt process-focusable))
+  "Jak 2 vehicle-guard-method-152 on Jak 3's vehicle-controller: while the target is in sight and
+   coming at us, fly straight (direct-mode) at the point where it will be when we meet, else take
+   the turn toward its position; then add up to twice the top speed while pointing at it."
+  (when (logtest? (vehicle-flag target-in-sight) (-> this v-flags))
+    (let ((spos (-> this root trans))
+          (tpos (new 'stack-no-clear 'vector))
+          (tvel (new 'stack-no-clear 'vector))
+          (dir (new 'stack-no-clear 'vector))
+          (tmp (new 'stack-no-clear 'vector))
+          )
+      (vector-copy! tpos (get-trans tgt 3))
+      (+! (-> tpos y) 4096.0)
+      (vector-copy! tvel (get-transv tgt))
+      (vector-! dir tpos spos)
+      (let ((dist (vector-length dir)))
+        (vector-normalize! dir 1.0)
+        (logclear! (-> this controller flags) (vehicle-controller-flag direct-mode))
+        (when (and (< 4096.0 (vector-length tvel))
+                   (>= (- (vector-dot dir (vector-normalize-copy! tmp tvel 1.0))) (cos 21845.334))
+                   )
+          (logior! (-> this controller flags) (vehicle-controller-flag direct-mode))
+          (vector-! tmp (-> this root transv) tvel)
+          (let ((t (fmax 0.0 (fmin 1.0 (/ dist (fmax 4096.0 (vector-dot tmp dir)))))))
+            (vector+float*! tpos tpos tvel t)
+            (cond
+              ((or (< t 0.05) (vehicle-los-clear? tpos spos))
+               (vector-! dir tpos spos)
+               (vector-normalize! dir 1.0)
+               (vector-float*! tvel tvel -1.0)
+               )
+              (else
+                (vector-copy! tpos (get-trans tgt 3))
+                )
+              )
+            )
+          )
+        )
+      ;; #x43cccccd = 409.6 as float bits, the turn-speed floor Jak 2 passes here
+      (vehicle-controller-method-19 (-> this controller) spos (the-as object #x43cccccd) tpos tvel)
+      (vector-normalize-copy! tmp (-> this root transv) 1.0)
+      (let ((facing (fmax 0.0 (vector-dot tmp dir))))
+        (cond
+          ((< -12288.0 (- (-> tpos y) (-> spos y)))
+           (logior! (-> this controller flags) (vehicle-controller-flag ignore-others no-slowing-for-turns))
+           (+! (-> this controller target-speed) (* 2.0 (-> this info handling max-xz-speed) facing facing))
+           )
+          (else
+            (logclear! (-> this controller flags) (vehicle-controller-flag ignore-others no-slowing-for-turns))
+            (+! (-> this controller target-speed) (* (-> this info handling max-xz-speed) facing))
+            )
+          )
+        )
+      )
+    )
+  (none)
+  )
+
+(defmethod rbody-event-handler ((this h-hellcat) (arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
+  "Jak 2 vehicle-guard events: 'alert-begin (sent by the alert while active) arms the Hellcat from
+   alert level 2 up; 'alert-end and 'end-pursuit (sent by ff-squad-control-method-46 to the farthest
+   off-screen pursuer) stand it down."
+  (case arg2
+    (('alert-begin)
+     (when (and (not (logtest? (vehicle-flag dead alert) (-> this v-flags)))
+                (logtest? (vehicle-flag ai-driving) (-> this v-flags))
+                (-> arg3 param 0)
+                (>= (get-alert-level (-> this squad)) 2)
+                )
+       (mod-peaceful-haven-city-hellcat-engage this (the-as process (-> arg3 param 0)))
+       )
+     )
+    (('alert-end 'end-pursuit)
+     (if (and (logtest? (vehicle-flag alert) (-> this v-flags)) (not (logtest? (vehicle-flag dead) (-> this v-flags))))
+         (mod-peaceful-haven-city-hellcat-stand-down this)
+         )
+     )
+    (else
+      ((method-of-type h-car-base rbody-event-handler) this arg0 arg1 arg2 arg3)
+      )
+    )
+  )
+
+(defmethod vehicle-method-130 ((this h-hellcat))
+  "Called by the stock attack handler when Jak hits this AI-flown Hellcat (constants flag #x4).
+   Jak 2 vehicle-method-134: with the alert system on, the attack raises the alert to 2 and the
+   Hellcat goes after Jak."
+  (when (and *mod-peaceful-haven-city-alert* *target*)
+    (mod-peaceful-haven-city-hellcat-engage this *target*)
+    (vehicle-method-107 this 2 *target*)
+    )
+  0
+  (none)
+  )
+
+(defstate active (h-hellcat)
+  :virtual #t
+  :post (behavior ()
+    ;; Jak 2 vehicle-guard active: an alerted Hellcat looks for its target for 8 s, chases on sight
+    ;; (`go` from a :post returns: the state changes next frame, so the branches stay exclusive)
+    (when (logtest? (vehicle-flag alert) (-> self v-flags))
+      (mod-peaceful-haven-city-hellcat-sight self)
+      (cond
+        ((logtest? (vehicle-flag in-pursuit) (-> self v-flags))
+         (logior! (-> self v-flags) (vehicle-flag persistent))
+         (go-virtual hostile)
+         )
+        ((or (time-elapsed? (-> self state-time) (seconds 8)) (< (square 409600.0) (-> self player-dist2)))
+         (logclear! (-> self v-flags) (vehicle-flag persistent alert))
+         )
+        )
+      )
+    (vehicle-method-129 self)
+    (hvehicle-method-159 self)
+    )
+  )
+
+(defstate hostile (h-hellcat)
+  :virtual #t
+  :event vehicle-event-handler
+  :enter (behavior ()
+    (set-time! (-> self state-time))
+    )
+  :code sleep-code
+  :post (behavior ()
+    ;; Jak 2 vehicle-guard hostile: give up after 8 s without sight, or after 0.5 s when two other
+    ;; units already see the target; otherwise shoot when in sight and steer after it
+    (mod-peaceful-haven-city-hellcat-sight self)
+    (if (and (logtest? (vehicle-flag in-pursuit) (-> self v-flags))
+             (or (time-elapsed? (-> self target-in-sight-time) (seconds 8))
+                 (and (>= (-> self squad alert-state guards-in-sight-of-target) 2)
+                      (time-elapsed? (-> self target-in-sight-time) (seconds 0.5))
+                      )
+                 )
+             )
+        (vehicle-method-105 self)
+        )
+    (let ((tgt (as-type (handle->process (-> self pursuit-target)) process-focusable)))
+      (cond
+        ((and tgt (logtest? (vehicle-flag in-pursuit) (-> self v-flags)))
+         (if (logtest? (vehicle-flag target-in-sight) (-> self v-flags))
+             (turret-control-method-11 (-> self turret) self (get-trans tgt 3) (get-transv tgt))
+             )
+         (mod-peaceful-haven-city-hellcat-steer self tgt)
+         )
+        (else
+          ;; target gone or pursuit dropped (`go` from a :post returns, hence the exclusive branch)
+          (mod-peaceful-haven-city-hellcat-stand-down self)
+          )
+        )
+      )
+    (vehicle-method-129 self)
+    (hvehicle-method-159 self)
+    )
+  )
+
+;; Hellcats out at once (traffic cap: 20 per type). Jak 2 added two Hellcats from alert level 3.
+(defconstant MOD_PEACEFUL_HAVEN_CITY_HELLCATS 3)
+(defconstant MOD_PEACEFUL_HAVEN_CITY_HELLCATS_ALERT 5)
+
+(defun mod-peaceful-haven-city-hellcat-update ((this ff-squad-control))
+  "Hellcat traffic bookkeeping. While the toggle is on and CTYPESA (art) is loaded: register its level
+   for vehicle-type h-hellcat (lwide-deactivate clears it when CTYPESA unloads) and set the guard-car
+   pool and activation caps, which stock code zeroes every frame. Toggle off: clear both and recall
+   the Hellcats out."
+  (let ((info *traffic-info*)
+        (ti (-> this traffic object-type-info-array (traffic-type guard-car)))
+        )
+    (cond
+      ((and *mod-peaceful-haven-city-hellcats* (= (level-status? *level* 'ctypesa #f) 'active))
+       ;; also after a traffic restart (death, checkpoint), which resets every type's level to #f
+       (when (or (!= (-> info vehicle-levels (vehicle-type h-hellcat)) 'ctypesa) (!= (-> ti level) 'ctypesa))
+         (set! (-> info vehicle-levels (vehicle-type h-hellcat)) 'ctypesa)
+         (update-level-info (the-as level #f))
+         )
+       (let ((n (if (and *mod-peaceful-haven-city-alert* (>= (-> this alert-state level) (the-as uint 3)))
+                    MOD_PEACEFUL_HAVEN_CITY_HELLCATS_ALERT
+                    MOD_PEACEFUL_HAVEN_CITY_HELLCATS
+                    )
+                )
+             )
+         (set! (-> ti want-count) n)
+         ;; the alert's ending phase zeroed the caps already this frame: keep that block
+         (when (not (and *mod-peaceful-haven-city-alert*
+                         (logtest? (-> this alert-state flags) (squad-alert-flag alert-ending))
+                         )
+                    )
+           (dotimes (m 3)
+             (set! (-> ti target-counts m) n)
+             )
+           )
+         )
+       )
+      (else
+        (set! (-> ti want-count) 0)
+        (dotimes (m 3)
+          (set! (-> ti target-counts m) 0)
+          )
+        (when (-> info vehicle-levels (vehicle-type h-hellcat))
+          (set! (-> info vehicle-levels (vehicle-type h-hellcat)) #f)
+          (update-level-info (the-as level #f))
+          (send-event *traffic-manager* 'deactivate-by-type (traffic-type guard-car))
+          )
+        )
+      )
+    )
+  (none)
+  )
+
+;; ================================================================================================
+;; Entry point
+;; ================================================================================================
+
+(defun mod-peaceful-haven-city-update ((this ff-squad-control))
+  "Called at the end of ff-squad-control `update` (hook in ff-squad-control.gc), once per frame while
+   the city traffic runs, after every stock write of the frame and before the traffic manager spawns:
+   whatever is set here is what spawning sees."
+  (mod-peaceful-haven-city-alert-counts this)
+  (mod-peaceful-haven-city-peace-update)
+  (mod-peaceful-haven-city-hellcat-update this)
+  (none)
+  )

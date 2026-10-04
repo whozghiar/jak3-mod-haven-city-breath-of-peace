@@ -1,0 +1,94 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: peaceful-haven-city-menu.gc
+;; dgos: GAME
+;;
+;; Peaceful Haven City -- GAME-resident half of the mod: the three Mods-menu toggles
+;; ([L3 + SELECT] > Mods > peaceful-haven-city) and the data the city code points the game at.
+;;
+;; Why this file is in GAME and not with the gameplay code (CWI, peaceful-haven-city.gc):
+;;   - the Mods menu must exist in every level, and a menu file must never be debug-only;
+;;   - the city code patches GAME-resident level-load-infos (the ctywide-* borrow aliases). Anything
+;;     those infos point at must outlive the CWI DGO, or leaving Haven City would leave dangling
+;;     pointers. So the replacement alias list and the saved originals live here.
+;;
+;; The menu only flips flags. The city code reads them every frame and applies or undoes each
+;; feature on its own (no CWI function is ever called from here, so nothing dangles when CWI unloads).
+;; Every feature ships OFF: with the three flags #f the game plays as stock.
+
+;; ------------------------------------------------------------------------------------------------
+;; Player toggles (read every frame by peaceful-haven-city.gc)
+;; ------------------------------------------------------------------------------------------------
+
+;; Peace in Haven City: Freedom League guards in every district, citizens in every district except
+;; the Metal Head zone, no Krimson Guard robots nor Metal Heads. Yields to missions that drive the
+;; city's factions themselves.
+(define *mod-peaceful-haven-city-peace* #f)
+
+;; Jak 2's alert system (wanted level 0-4, alert music, guards and Hellcats hunting Jak).
+(define *mod-peaceful-haven-city-alert* #f)
+
+;; Freedom League Hellcat patrols in the city's air traffic.
+(define *mod-peaceful-haven-city-hellcats* #f)
+
+;; ------------------------------------------------------------------------------------------------
+;; State shared with vanilla files (written by peaceful-haven-city.gc)
+;; ------------------------------------------------------------------------------------------------
+
+;; #t while peace is actually enforced (toggle on and no mission driving the city). Read by the
+;; flitter-spawner hook in ctywide-obs.gc.
+(define *mod-peaceful-haven-city-peace-active* #f)
+
+;; The borrow list every plain ctywide-* alias is switched to while peace is enforced: the stock
+;; `ctywide-ff` list (guards, cars, bikes, citizens). Citizens' art (ctypepa) must be resident in
+;; every district for them to walk there; Metal Head and robot art is not needed anymore.
+(define *mod-peaceful-haven-city-peace-alias*
+  '(ctywide copy ctypesa auto ctycara auto ctycarb auto ctypepa special))
+
+;; The aliases the peace mode may patch, and the list each one held before (to restore it).
+(define *mod-peaceful-haven-city-city-aliases*
+  (new 'static 'boxed-array :type symbol
+    'ctywide-ff 'ctywide-ff-kg 'ctywide-mh-kg 'ctywide-ff-mh 'ctywide-kg 'ctywide-mh 'ctywide-kg-mh
+    )
+  )
+
+(define *mod-peaceful-haven-city-saved-aliases*
+  (new 'static 'boxed-array :type object #f #f #f #f #f #f #f)
+  )
+
+;; ------------------------------------------------------------------------------------------------
+;; Mods menu
+;; ------------------------------------------------------------------------------------------------
+
+(define *mod-peaceful-haven-city-menu*
+  (new 'static 'popup-menu-submenu :label "peaceful-haven-city"
+    :entries (new 'static 'boxed-array :type popup-menu-entry
+      (new 'static 'popup-menu-flag :label "Peace in Haven City"
+           :is-toggled? (lambda () *mod-peaceful-haven-city-peace*)
+           :on-confirm (lambda ()
+                         (set! *mod-peaceful-haven-city-peace* (not *mod-peaceful-haven-city-peace*))
+                         (none))
+           )
+      (new 'static 'popup-menu-flag :label "Jak 2 alert system"
+           :is-toggled? (lambda () *mod-peaceful-haven-city-alert*)
+           :on-confirm (lambda ()
+                         (set! *mod-peaceful-haven-city-alert* (not *mod-peaceful-haven-city-alert*))
+                         (none))
+           )
+      (new 'static 'popup-menu-flag :label "Freedom League Hellcats"
+           :is-toggled? (lambda () *mod-peaceful-haven-city-hellcats*)
+           :on-confirm (lambda ()
+                         (set! *mod-peaceful-haven-city-hellcats* (not *mod-peaceful-haven-city-hellcats*))
+                         (none))
+           )
+      )
+    )
+  )
+
+(defun mod-peaceful-haven-city-build-menu ()
+  "Return this mod's entry for the Mods menu (pure: the menu is static)."
+  (the-as popup-menu-entry *mod-peaceful-haven-city-menu*)
+  )
+
+(mods-menu-register "peaceful-haven-city" mod-peaceful-haven-city-build-menu)

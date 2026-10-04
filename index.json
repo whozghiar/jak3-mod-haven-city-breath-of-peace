@@ -1,0 +1,40 @@
+{
+  "schemaVersion": "1.0.0",
+  "sourceName": "Haven City Breath of Peace Source",
+  "lastUpdated": "2026-10-04T22:49:56Z",
+  "mods": {
+    "haven-city-breath-of-peace": {
+      "displayName": "Haven City Breath of Peace",
+      "description": "Haven City at peace in Jak 3: Freedom League guards and citizens walk every district and enemies stop spawning, with an optional Jak 2-style alert system and Freedom Fighter Hellcat patrols, all switchable from the Mods menu.",
+      "authors": [
+        "whozghiar"
+      ],
+      "tags": [
+        "gameplay",
+        "custom-engine"
+      ],
+      "supportedGames": [
+        "jak3"
+      ],
+      "websiteUrl": "https://github.com/whozghiar/jak3-mod-haven-city-breath-of-peace",
+      "versions": [
+        {
+          "version": "1.0.0",
+          "publishedDate": "2026-10-04T22:49:56Z",
+          "supportedGames": [
+            "jak3"
+          ],
+          "assets": {
+            "windows": "https://github.com/whozghiar/jak3-mod-haven-city-breath-of-peace/releases/download/haven-city-breath-of-peace-v1.0.0/windows-haven-city-breath-of-peace-v1.0.0.zip",
+            "linux": "https://github.com/whozghiar/jak3-mod-haven-city-breath-of-peace/releases/download/haven-city-breath-of-peace-v1.0.0/linux-haven-city-breath-of-peace-v1.0.0.zip"
+          },
+          "checksums": {
+            "windows": "3c5e35db24f2bbe2a0ddd94d1e8ad11bbe11ece30ee202bb10202a3778ab795f",
+            "linux": "4f1d9a196856b6f756822308537c4cedc4d4f104c0d4922bf8875552d20de9af"
+          }
+        }
+      ]
+    }
+  },
+  "texturePacks": {}
+}

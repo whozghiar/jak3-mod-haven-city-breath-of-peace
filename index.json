@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "sourceName": "Haven City Breath of Peace Source",
-  "lastUpdated": "2026-10-04T22:49:56Z",
+  "lastUpdated": "2026-10-09T18:46:04Z",
   "mods": {
     "haven-city-breath-of-peace": {
       "displayName": "Haven City Breath of Peace",
@@ -19,6 +19,21 @@
       "websiteUrl": "https://github.com/whozghiar/jak3-mod-haven-city-breath-of-peace",
       "versions": [
         {
+          "version": "1.0.1",
+          "publishedDate": "2026-10-09T18:46:04Z",
+          "supportedGames": [
+            "jak3"
+          ],
+          "assets": {
+            "windows": "https://github.com/whozghiar/jak3-mod-haven-city-breath-of-peace/releases/download/haven-city-breath-of-peace-v1.0.1/windows-haven-city-breath-of-peace-v1.0.1.zip",
+            "linux": "https://github.com/whozghiar/jak3-mod-haven-city-breath-of-peace/releases/download/haven-city-breath-of-peace-v1.0.1/linux-haven-city-breath-of-peace-v1.0.1.zip"
+          },
+          "checksums": {
+            "windows": "9d7e917049d96dc9c604e6cc381a2082f298328b81ad8af473bd0987ca02f913",
+            "linux": "351e55ebadd4096616b56c0673ff7055f9557fb51b20c6321d67a1c9a64de01c"
+          }
+        },
+        {
           "version": "1.0.0",
           "publishedDate": "2026-10-04T22:49:56Z",
           "supportedGames": [
@@ -33,7 +48,9 @@
             "linux": "4f1d9a196856b6f756822308537c4cedc4d4f104c0d4922bf8875552d20de9af"
           }
         }
-      ]
+      ],
+      "coverArtUrl": "https://raw.githubusercontent.com/whozghiar/jak3-mod-haven-city-breath-of-peace/main/docs/img/mod/mod_cover.png",
+      "thumbnailArtUrl": "https://raw.githubusercontent.com/whozghiar/jak3-mod-haven-city-breath-of-peace/main/docs/img/mod/mod_cover.png"
     }
   },
   "texturePacks": {}

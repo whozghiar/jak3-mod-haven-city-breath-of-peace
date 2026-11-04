@@ -15,7 +15,11 @@
 
 (defglobalconstant LEVEL_HEAP_SIZE (* NUM_LEVEL_PAGES LEVEL_PAGE_SIZE))
 ;(defglobalconstant DEBUG_LEVEL_HEAP_MULT 1.5) ;; level heap in debug mode is 1.5x larger
-(defglobalconstant DEBUG_LEVEL_HEAP_MULT 15.0) ;; og:preserve-this PC port: ~262 MB total level heap for custom actors/entities
+;; The level heap ends below 256 MB: adgif shader links keep an address in 24 bits of address/16
+;; (shader-ptr, texture-h.gc), so the textures of a level loaded above it corrupt the shader lists
+;; and the next level unload crashes in unlink-shaders-in-heap. 15.0 put the top banks past
+;; #x10000000 (Spargus wasstadb at #x109a00f0); 12.0 ends the heap near #xf400000.
+(defglobalconstant DEBUG_LEVEL_HEAP_MULT 12.0) ;; og:preserve-this PC port: ~216 MB level heap for custom actors/entities
 (defglobalconstant DEBUG_LEVEL_PAGE_SIZE (* 1024 (* DEBUG_LEVEL_HEAP_MULT LEVEL_PAGE_SIZE_KB)))
 (defglobalconstant DEBUG_LEVEL_HEAP_SIZE (* NUM_LEVEL_PAGES DEBUG_LEVEL_PAGE_SIZE))
 
@@ -2919,7 +2923,6 @@
     process
     (lambda ()
       (play #t #t)
-      (auto-save-command 'restore 0 0 *default-pool* #f)
       (none))
     :from *4k-dead-pool*
     :stack *kernel-dram-stack*
